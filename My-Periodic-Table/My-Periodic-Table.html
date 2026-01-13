@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Periodic Table My Edition - Import/Export Enabled</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg-color: #f8fafc;
+        }
+        body {
+            background-color: var(--bg-color);
+            font-family: 'Helvetica Neue', Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        .periodic-wrapper {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 10px 0;
+        }
+        
+        .periodic-grid {
+            display: grid;
+            grid-template-columns: repeat(18, minmax(52px, 1fr));
+            gap: 4px;
+            min-width: 1050px;
+            margin: 0 auto;
+        }
+
+        .element-card {
+            aspect-ratio: 1 / 1.15;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid rgba(0,0,0,0.03);
+            position: relative;
+            background: #fff;
+            user-select: none;
+        }
+
+        .favorite-mark {
+            position: absolute;
+            top: 2px;
+            right: 4px;
+            font-size: 0.6rem;
+            color: #ef4444;
+            display: none;
+        }
+        .element-card.is-favorite .favorite-mark {
+            display: block;
+        }
+        .element-card.is-favorite {
+            box-shadow: inset 0 0 0 2px #ef4444;
+        }
+
+        .memo-indicator {
+            position: absolute;
+            bottom: 2px;
+            right: 4px;
+            width: 4px;
+            height: 4px;
+            background-color: #f59e0b;
+            border-radius: 50%;
+            display: none;
+        }
+        .element-card.has-memo .memo-indicator {
+            display: block;
+        }
+
+        @media (hover: hover) {
+            .element-card:hover {
+                transform: scale(1.2);
+                z-index: 50;
+                box-shadow: 0 12px 20px -5px rgba(0,0,0,0.15);
+                filter: brightness(1.03);
+            }
+        }
+
+        .element-card.dimmed {
+            opacity: 0.1;
+            filter: grayscale(1);
+            pointer-events: none;
+        }
+
+        .atomic-number {
+            font-size: 0.65rem;
+            position: absolute;
+            top: 2px;
+            left: 4px;
+            font-weight: 700;
+            color: rgba(0,0,0,0.4);
+        }
+        .symbol {
+            font-weight: 800;
+            font-size: 1.2rem;
+            color: #0f172a;
+        }
+        .name {
+            font-size: 0.55rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 95%;
+            text-align: center;
+            color: #334155;
+            font-weight: 600;
+        }
+
+        /* Category Colors */
+        .reactive-nonmetal { background-color: #dcfce7; border-bottom: 4px solid #22c55e; }
+        .noble-gas { background-color: #fce7f3; border-bottom: 4px solid #db2777; }
+        .alkali-metal { background-color: #ffedd5; border-bottom: 4px solid #f97316; }
+        .alkaline-earth-metal { background-color: #fef9c3; border-bottom: 4px solid #eab308; }
+        .metalloid { background-color: #ccfbf1; border-bottom: 4px solid #14b8a6; }
+        .post-transition-metal { background-color: #f1f5f9; border-bottom: 4px solid #94a3b8; }
+        .transition-metal { background-color: #e0f2fe; border-bottom: 4px solid #0ea5e9; }
+        .lanthanide { background-color: #fae8ff; border-bottom: 4px solid #d946ef; }
+        .actinide { background-color: #fee2e2; border-bottom: 4px solid #ef4444; }
+        .unknown { background-color: #f8fafc; border-bottom: 4px solid #e2e8f0; }
+
+        #detail-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            z-index: 100;
+            padding: 1rem;
+            overflow-y: auto;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            width: 100%;
+            max-width: 550px;
+            max-height: 92vh;
+            overflow-y: auto;
+            background: white;
+            border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-6 lg:p-8">
+
+<div class="max-w-7xl mx-auto">
+    <!-- Header Section -->
+    <header class="flex flex-col xl:flex-row xl:items-end justify-between mb-4 gap-6">
+        <div>
+            <div class="flex items-center gap-3 mb-2">
+                <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
+                    <span class="text-white font-black text-sm">118</span>
+                </div>
+                <h1 class="text-3xl font-black text-slate-900 tracking-tight">元素図鑑 <span class="text-indigo-600 font-medium">My Edition</span></h1>
+            </div>
+            <p class="text-slate-500 font-medium">118元素すべての詳細と自分専用メモ（CSV入出力対応）</p>
+        </div>
+        
+        <div class="flex flex-col sm:flex-row gap-3">
+            <div class="flex gap-2">
+                <button onclick="exportToCSV()" class="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl shadow-lg shadow-emerald-100 flex items-center justify-center gap-2 font-bold transition-all">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    出力
+                </button>
+                <label class="px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl shadow-sm flex items-center justify-center gap-2 font-bold transition-all cursor-pointer">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    取込
+                    <input type="file" id="csv-import" accept=".csv" class="hidden" onchange="importFromCSV(event)">
+                </label>
+            </div>
+            <div class="relative flex-1 sm:w-80">
+                <input type="text" id="search-input" placeholder="名称、記号、メモの内容..." 
+                       class="w-full pl-11 pr-4 py-3 border-0 bg-white shadow-sm ring-1 ring-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 transition-all focus:outline-none">
+                <svg class="w-5 h-5 text-slate-400 absolute left-4 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+            </div>
+            <select id="category-filter" class="px-4 py-3 border-0 bg-white shadow-sm ring-1 ring-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer text-slate-700 font-medium">
+                <option value="all">すべてのカテゴリ</option>
+                <option value="fav">★ お気に入り</option>
+                <option value="reactive-nonmetal">非金属</option>
+                <option value="noble-gas">希ガス</option>
+                <option value="alkali-metal">アルカリ金属</option>
+                <option value="alkaline-earth-metal">アルカリ土類金属</option>
+                <option value="transition-metal">遷移金属</option>
+                <option value="metalloid">半金属</option>
+                <option value="post-transition-metal">遷移後金属</option>
+                <option value="lanthanide">ランタノイド</option>
+                <option value="actinide">アクチノイド</option>
+                <option value="unknown">未知</option>
+            </select>
+        </div>
+    </header>
+
+    <!-- Usage Guide Section -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        <div class="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-start gap-3">
+            <div class="bg-amber-100 p-2 rounded-lg text-amber-600">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+            </div>
+            <div>
+                <h3 class="text-sm font-bold text-amber-900">メモ・お気に入り機能</h3>
+                <p class="text-xs text-amber-800 leading-relaxed mt-0.5">自分だけの学習記録を保存。★マークで覚えたい元素をチェックできます。</p>
+            </div>
+        </div>
+        <div class="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-start gap-3">
+            <div class="bg-amber-100 p-2 rounded-lg text-amber-600">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
+            </div>
+            <div>
+                <h3 class="text-sm font-bold text-amber-900">入出力対応</h3>
+                <p class="text-xs text-amber-800 leading-relaxed mt-0.5">CSVでの保存と読み込みが可能。Excelなどで作成したメモも取り込めます。</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="periodic-wrapper">
+        <div class="periodic-grid" id="main-grid"></div>
+        <div class="h-12"></div>
+        <div class="periodic-grid" id="sub-grid"></div>
+    </div>
+
+    <!-- Full Category Legend -->
+    <div class="mt-10 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+        <h3 class="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-[0.2em]">Category Legend</h3>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-y-3 gap-x-4">
+            <div class="flex items-center text-xs font-bold text-slate-600"><span class="w-4 h-4 rounded-md reactive-nonmetal mr-2 border-b-2"></span>非金属</div>
+            <div class="flex items-center text-xs font-bold text-slate-600"><span class="w-4 h-4 rounded-md noble-gas mr-2 border-b-2"></span>希ガス</div>
+            <div class="flex items-center text-xs font-bold text-slate-600"><span class="w-4 h-4 rounded-md alkali-metal mr-2 border-b-2"></span>アルカリ金属</div>
+            <div class="flex items-center text-xs font-bold text-slate-600"><span class="w-4 h-4 rounded-md alkaline-earth-metal mr-2 border-b-2"></span>アルカリ土類金属</div>
+            <div class="flex items-center text-xs font-bold text-slate-600"><span class="w-4 h-4 rounded-md metalloid mr-2 border-b-2"></span>半金属</div>
+            <div class="flex items-center text-xs font-bold text-slate-600"><span class="w-4 h-4 rounded-md transition-metal mr-2 border-b-2"></span>遷移金属</div>
+            <div class="flex items-center text-xs font-bold text-slate-600"><span class="w-4 h-4 rounded-md post-transition-metal mr-2 border-b-2"></span>遷移後金属</div>
+            <div class="flex items-center text-xs font-bold text-slate-600"><span class="w-4 h-4 rounded-md lanthanide mr-2 border-b-2"></span>ランタノイド</div>
+            <div class="flex items-center text-xs font-bold text-slate-600"><span class="w-4 h-4 rounded-md actinide mr-2 border-b-2"></span>アクチノイド</div>
+            <div class="flex items-center text-xs font-bold text-slate-600"><span class="w-4 h-4 rounded-md unknown mr-2 border-b-2"></span>未知の元素</div>
+        </div>
+        <div class="mt-6 pt-6 border-t border-slate-50 flex justify-between items-center">
+            <p class="text-[10px] text-slate-400 font-medium italic">※データはブラウザに保存されます。端末を替える際はCSV出力を活用してください。</p>
+            <button onclick="clearAllData()" class="text-[10px] font-black text-rose-500 hover:bg-rose-50 px-3 py-1.5 rounded-lg transition-all border border-rose-100">
+                全データをリセット
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="detail-modal" onclick="closeModal()">
+    <div class="modal-content shadow-2xl transform transition-all" onclick="event.stopPropagation()">
+        <div id="modal-header" class="p-10 text-white relative">
+            <button onclick="closeModal()" class="absolute top-6 right-6 bg-white/10 hover:bg-white/30 p-2 rounded-full transition-all">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            <div class="flex justify-between items-start">
+                <span id="modal-atomic-number" class="text-5xl font-black opacity-30"></span>
+                <span id="modal-symbol" class="text-7xl font-bold tracking-tight"></span>
+            </div>
+            <div class="flex items-center gap-4 mt-2">
+                <h2 id="modal-name" class="text-4xl font-black"></h2>
+                <button id="favorite-btn" onclick="toggleFavorite()" class="mt-1 p-2 bg-white/20 hover:bg-white/40 rounded-full transition-all">
+                    <svg id="fav-icon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.54 1.118l-3.976-2.888a1 1 0 00-1.175 0l-3.976 2.888c-.784.57-1.838-.197-1.539-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path></svg>
+                </button>
+            </div>
+            <div id="modal-category-badge" class="inline-block mt-4 px-4 py-1.5 bg-black/10 rounded-full text-[10px] font-black uppercase tracking-widest backdrop-blur-md"></div>
+        </div>
+        
+        <div class="p-8 space-y-8">
+            <section class="bg-amber-50 p-6 rounded-2xl border border-amber-100">
+                <div class="flex items-center gap-2 mb-3 text-amber-800">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                    <h3 class="text-xs font-black uppercase tracking-widest">My 学習メモ</h3>
+                </div>
+                <textarea id="modal-memo" class="w-full h-24 p-4 bg-white/70 border-0 rounded-xl focus:ring-2 focus:ring-amber-400 focus:outline-none text-slate-700 font-medium placeholder:text-amber-200" placeholder="この元素について学んだことをメモしましょう..."></textarea>
+            </section>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div class="p-5 bg-slate-50 rounded-2xl border border-slate-100">
+                    <p class="text-[10px] font-black text-slate-400 uppercase mb-1">原子量</p>
+                    <p id="modal-mass" class="text-xl font-bold text-slate-800"></p>
+                </div>
+                <div class="p-5 bg-slate-50 rounded-2xl border border-slate-100">
+                    <p class="text-[10px] font-black text-slate-400 uppercase mb-1">物理状態</p>
+                    <p id="modal-phase" class="text-xl font-bold text-slate-800"></p>
+                </div>
+            </div>
+            
+            <section>
+                <h3 class="text-[10px] font-black text-slate-400 uppercase mb-3 tracking-widest">主な用途</h3>
+                <div class="bg-indigo-50/50 p-5 rounded-2xl border border-indigo-100">
+                    <p id="modal-usage" class="text-indigo-900 font-bold leading-relaxed"></p>
+                </div>
+            </section>
+
+            <section>
+                <h3 class="text-[10px] font-black text-slate-400 uppercase mb-3 tracking-widest">概要・特徴</h3>
+                <p id="modal-desc" class="text-slate-600 leading-relaxed font-medium"></p>
+            </section>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 1-118 Elements Dataset
+    const rawData = [
+        [1,"H","水素","reactive-nonmetal",1,1,"1.008","気体","ロケット燃料、アンモニア合成、燃料電池","宇宙で最も豊富。燃えて水になるクリーン燃料。"],
+        [2,"He","ヘリウム","noble-gas",18,1,"4.0026","気体","冷却材(MRI)、気球、深海潜水","非常に軽く不活性。超伝導冷却に必須。"],
+        [3,"Li","リチウム","alkali-metal",1,2,"6.94","固体","スマホ・EV用二次電池、合金、医療","最も軽い金属。現代のエネルギー社会の要。"],
+        [4,"Be","ベリリウム","alkaline-earth-metal",2,2,"9.0122","固体","航空宇宙、X線管、スピーカー","軽量で高剛性。中性子反射体としても重要。"],
+        [5,"B","ホウ素","metalloid",13,2,"10.81","固体","耐熱ガラス、洗剤、農薬、半導体","硬く熱に強い。ガラスの熱膨張を抑える。"],
+        [6,"C","炭素","reactive-nonmetal",14,2,"12.011","固体","鉛筆、ダイヤ、燃料、炭素繊維","生命の基。多様な結合を作り出す。"],
+        [7,"N","窒素","reactive-nonmetal",15,2,"14.007","気体","肥料、食品冷却、タイヤ、化学工業","大気の78%。安定だが化合物は反応性に富む。"],
+        [8,"O","酸素","reactive-nonmetal",16,2,"15.999","気体","呼吸、製鉄、溶接、酸化剤","呼吸に必須。地殻で最も多い元素。"],
+        [9,"F","フッ素","reactive-nonmetal",17,2,"18.998","気体","歯磨き粉、テフロン、冷媒、洗浄液","最強の反応性。あらゆる物質を侵食。"],
+        [10,"Ne","ネオン","noble-gas",18,2,"20.180","気体","ネオン看板、レーザー、照明","放電で赤橙色に光る希ガス。"],
+        [11,"Na","ナトリウム","alkali-metal",1,3,"22.990","固体","食塩、照明、高速炉、生体維持","水で爆発。体内の浸透圧を調整する。"],
+        [12,"Mg","マグネシウム","alkaline-earth-metal",2,3,"24.305","固体","自動車部品、カメラ、サプリメント","実用金属で最軽量。光合成の中心。"],
+        [13,"Al","アルミニウム","post-transition-metal",13,3,"26.982","固体","1円玉、窓枠、航空機、電線","軽くて錆びにくい。リサイクル性が高い。"],
+        [14,"Si","ケイ素","metalloid",14,3,"28.085","固体","ICチップ、太陽電池、ガラス","砂の主成分。IT社会を支える半導体。"],
+        [15,"P","リン","reactive-nonmetal",15,3,"30.974","固体","肥料、マッチ、DNA、農薬","生物のエネルギー代謝(ATP)の核。"],
+        [16,"S","硫黄","reactive-nonmetal",16,3,"32.06","固体","硫酸、火薬、ゴム加硫、温泉","黄色い固体。火山のガスやタンパク質に含有。"],
+        [17,"Cl","塩素","reactive-nonmetal",17,3,"35.45","気体","消毒、漂白、塩化ビニル、塩","強力な酸化剤。水道水の消毒に使用。"],
+        [18,"Ar","アルゴン","noble-gas",18,3,"39.948","気体","溶接、白熱電球、断熱ガラス","空気中に1%存在。不活性ガスとして多用。"],
+        [19,"K","カリウム","alkali-metal",1,4,"39.098","固体","肥料、石鹸、火薬、生体信号","植物の肥料3大要素。神経伝達に必須。"],
+        [20,"Ca","カルシウム","alkaline-earth-metal",2,4,"40.078","固体","セメント、石灰、骨・歯、栄養剤","骨の成分。筋肉の収縮にも関与。"],
+        [21,"Sc","スカンジウム","transition-metal",3,4,"44.956","固体","航空機合金、水銀灯、レーザー","軽い遷移金属。アルミとの合金が強力。"],
+        [22,"Ti","チタン","transition-metal",4,4,"47.867","固体","航空機、眼鏡、人工関節、塗料","強くて軽く錆びない。生体親和性が高い。"],
+        [23,"V","バナジウム","transition-metal",5,4,"50.942","固体","特殊鋼、触媒、蓄電池","鋼に混ぜると強度が飛躍的に向上。"],
+        [24,"Cr","クロム","transition-metal",6,4,"51.996","固体","ステンレス、メッキ、顔料","耐食性が高く、合金の錆止めに使用。"],
+        [25,"Mn","マンガン","transition-metal",7,4,"54.938","固体","乾電池、マンガン鋼、レール","鋼の脱硫・脱酸素剤として重要。"],
+        [26,"Fe","鉄","transition-metal",8,4,"55.845","固体","建築、機械、車、血液、磁石","最も身近な金属。人類文明の基盤。"],
+        [27,"Co","コバルト","transition-metal",9,4,"58.933","固体","リチウムイオン電池正極、超硬合金","鮮やかな青色(コバルトブルー)の原料。"],
+        [28,"Ni","ニッケル","transition-metal",10,4,"58.693","固体","ステンレス、50円/100円玉、充電池","耐食性に優れ、メッキや合金に多用。"],
+        [29,"Cu","銅","transition-metal",11,4,"63.546","固体","電線、10円玉、水道管、真鍮","導電性が高く、電気インフラの要。"],
+        [30,"Zn","亜鉛","transition-metal",12,4,"65.38","固体","トタン、ダイカスト、乾電池、酵素","錆止めや合金(真鍮)に不可欠。"],
+        [31,"Ga","ガリウム","post-transition-metal",13,4,"69.723","液体/固体","LED、半導体レーザー、温度計","低融点(29.7℃)。手の上で溶ける。"],
+        [32,"Ge","ゲルマニウム","metalloid",14,4,"72.630","固体","光ファイバー、赤外線レンズ、整流器","初期のトランジスタに使われた半導体。"],
+        [33,"As","ヒ素","metalloid",15,4,"74.922","固体","半導体添加物、殺虫剤(旧)、合金","毒性があるが、半導体の特性調整に。"],
+        [34,"Se","セレン","reactive-nonmetal",16,4,"78.971","固体","コピー機、光電セル、ガラス着色","光を当てると電気が流れる光電導性。"],
+        [35,"Br","臭素","reactive-nonmetal",17,4,"79.904","液体","難燃剤、農薬、写真フィルム","常温で液体の非金属元素。赤褐色。"],
+        [36,"Kr","クリプトン","noble-gas",18,4,"83.798","気体","電球、レーザー、断熱ガラス","希ガス。強力な光を発する光源に。"],
+        [37,"Rb","ルビジウム","alkali-metal",1,5,"85.468","固体","原子時計、真空排気剤、光電セル","非常に反応性の高いアルカリ金属。"],
+        [38,"Sr","ストロンチウム","alkaline-earth-metal",2,5,"87.62","固体","花火(赤)、磁石、蛍光灯","炎色反応で鮮やかな赤色を呈する。"],
+        [39,"Y","イットリウム","transition-metal",3,5,"88.906","固体","LED蛍光体、超伝導体、レーザー","希土類元素の一つ。カラーテレビに寄与。"],
+        [40,"Zr","ジルコニウム","transition-metal",4,5,"91.224","固体","核燃料被覆管、人工ダイヤ、触媒","耐食性が極めて高い。宝飾品にも。"],
+        [41,"Nb","ニオブ","transition-metal",5,5,"92.906","固体","超伝導磁石、特殊鋼、ジュエリー","低温で超伝導を示す。加工しやすい。"],
+        [42,"Mo","モリブデン","transition-metal",6,5,"95.95","固体","潤滑剤、特殊鋼、電気接点","高温でも強度が落ちない。潤滑性がある。"],
+        [43,"Tc","テクネチウム","transition-metal",7,5,"98","固体","医療用放射性診断(骨シンチ等)","最初の人工元素。安定同位体がない. "],
+        [44,"Ru","ルテニウム","transition-metal",8,5,"101.07","固体","ハードディスク、触媒、万年筆ペン先","白金族。電気接点の摩耗を防ぐ。"],
+        [45,"Rh","ロジウム","transition-metal",9,5,"102.91","固体","自動車排ガス触媒、宝飾メッキ","非常に希少で高価。触媒能が高い。"],
+        [46,"Pd","パラジウム","transition-metal",10,5,"106.42","固体","歯科合金、排ガス触媒、水素貯蔵","水素を吸収する能力が高い。"],
+        [47,"Ag","銀","transition-metal",11,5,"107.87","固体","アクセサリー、写真、電子回路、鏡","導電性・熱伝導性が全元素で最大。"],
+        [48,"Cd","カドミウム","transition-metal",12,5,"112.41","固体","ニカド電池、メッキ、顔料","低融点合金の材料。イタイイタイ病の原因。"],
+        [49,"In","インジウム","post-transition-metal",13,5,"114.82","固体","液晶パネル(ITO)、低融点合金","透明で電気を通す液晶の心臓部。"],
+        [50,"Sn","スズ","post-transition-metal",14,5,"118.71","固体","はんだ、ブリキ、青銅、めっき","毒性が低く、青銅器時代から利用。"],
+        [51,"Sb","アンチモン","metalloid",15,5,"121.76","固体","難燃剤、鉛蓄電池添加剤、半導体","鉛の硬度を高めるために使われる。"],
+        [52,"Te","テルル","metalloid",16,5,"127.60","固体","光ディスク、熱電変換素子、合金","熱を電気に変える性質が注目される。"],
+        [53,"I","ヨウ素","reactive-nonmetal",17,5,"126.90","固体","消毒薬(うがい薬)、液晶偏光板、X線造影剤","海藻に多く含まれる。甲状腺に集まる。"],
+        [54,"Xe","キセノン","noble-gas",18,5,"131.29","気体","ヘッドライト、フラッシュ、イオンエンジン","非常に重い希ガス。麻酔効果もある。"],
+        [55,"Cs","セシウム","alkali-metal",1,6,"132.91","液体/固体","原子時計(秒の定義)、光電管","原子時計の基準として「1秒」を定める。"],
+        [56,"Ba","バリウム","alkaline-earth-metal",2,6,"137.33","固体","X線検査、花火(緑)、点火具","胃のレントゲン検査の造影剤として有名。"],
+        [57,"La","ランタン","lanthanide",3,9,"138.91","固体","カメラレンズ、ハイブリッド車電池","屈折率が高く、高級レンズに使われる。"],
+        [58,"Ce","セリウム","lanthanide",4,9,"140.12","固体","ガラス研磨剤、ライターの石","酸化セリウムはガラス磨きに最適。"],
+        [59,"Pr","プラセオジム","lanthanide",5,9,"140.91","固体","強力磁石、セラミックス着色","プラセオジム黄色などの顔料に。"],
+        [60,"Nd","ネオジム","lanthanide",6,9,"144.24","固体","最強の磁石、レーザー、ハードディスク","現代文明を支える最強磁石の主役。"],
+        [61,"Pm","プロメチウム","lanthanide",7,9,"145","固体","時計の蛍光塗料(旧)、原子力電池","天然にはほとんど存在しない人工元素。"],
+        [62,"Sm","サマリウム","lanthanide",8,9,"150.36","固体","サマコバ磁石、中性子吸収剤","高温に強い強力磁石の材料。"],
+        [63,"Eu","ユウロピウム","lanthanide",9,9,"151.96","固体","液晶・蛍光灯の蛍光体(赤・青)","光を鮮やかに発色させるランタノイド。"],
+        [64,"Gd","ガドリニウム","lanthanide",10,9,"157.25","固体","MRI造影剤、中性子遮蔽剤","強い磁性を持ち、医療診断に貢献. "],
+        [65,"Tb","テルビウム","lanthanide",11,9,"158.93","固体","緑色蛍光体、磁歪材料、ディスク","緑色の発光材料として重要。"],
+        [66,"Dy","ジスプロシウム","lanthanide",12,9,"162.50","固体","ネオジム磁石の耐熱性向上剤","電気自動車のモーター磁石に必須。"],
+        [67,"Ho","ホルミウム","lanthanide",13,9,"164.93","固体","強力な磁場、レーザー、磁力線","全元素中で最大の磁気モーメント。"],
+        [68,"Er","エルビウム","lanthanide",14,9,"167.26","固体","光ファイバー増幅器、ピンクのガラス","長距離通信の光信号を増幅。"],
+        [69,"Tm","ツリウム","lanthanide",15,9,"168.93","固体","X線源、レーザー、偽造防止インク","極めて希少。医療用レーザーに。"],
+        [70,"Yb","イッテルビウム","lanthanide",16,9,"173.05","固体","太陽電池、レーザー、ステンレス添加剤","近赤外線レーザーなどに使用。"],
+        [71,"Lu","ルテチウム","lanthanide",17,9,"174.97","固体","がん治療、石油精製触媒","ランタノイドの最後。密度が高い。"],
+        [72,"Hf","ハフニウム","transition-metal",4,6,"178.49","固体","原子力制御棒、プラズマ切断、半導体","中性子吸収力が強く、耐熱性も高い。"],
+        [73,"Ta","タンタル","transition-metal",5,6,"180.95","固体","コンデンサ、医療用具、化学装置","小型で高性能なスマホの電子部品に。"],
+        [74,"W","タングステン","transition-metal",6,6,"183.84","固体","電球フィラメント、超硬工具、重り","金属で最高の融点(3422℃)を持つ。"],
+        [75,"Re","レニウム","transition-metal",7,6,"186.21","固体","航空機エンジン、石油精製触媒","耐熱合金の切り札。非常に希少。"],
+        [76,"Os","オスミウム","transition-metal",8,6,"190.23","固体","万年筆のペン先、ハード合金、触媒","全元素で最大の密度を持つ。重い。"],
+        [77,"Ir","イリジウム","transition-metal",9,6,"192.22","固体","スパークプラグ、るつぼ、キログラム原器","極めて腐食しにくい。恐竜絶滅の鍵。"],
+        [78,"Pt","白金","transition-metal",10,6,"195.08","固体","触媒、指輪、がん治療、水素燃料","美しく安定。工業的には最強の触媒. "],
+        [79,"Au","金","transition-metal",11,6,"196.97","固体","宝飾、投資、電子回路、歯冠","腐食せず最高の展延性を持つ富の象徴。"],
+        [80,"Hg","水銀","transition-metal",12,6,"200.59","液体","温度計、蛍光灯、金採掘(旧)","常温で液体の唯一の金属。"],
+        [81,"Tl","タリウム","post-transition-metal",13,6,"204.38","固体","赤外線レンズ、医療検査、ネズミ捕り(旧)","非常に毒性が強く、取り扱いに注意。"],
+        [82,"Pb","鉛","post-transition-metal",14,6,"207.2","固体","蓄電池、放射線遮蔽、はんだ(旧)","重くて柔らかい。放射線を防ぐ壁。"],
+        [83,"Bi","ビスマス","post-transition-metal",15,6,"208.98","固体","胃薬、低融点合金、超伝導体","結晶が美しく、人体に無毒な重金属。"],
+        [84,"Po","ポロニウム","post-transition-metal",16,6,"209","固体","静電気除去、熱源(旧)","キュリー夫人が発見。強い放射能。"],
+        [85,"At","アスタチン","metalloid",17,6,"210","固体","がん治療研究","地球上にほとんどない幻の元素。"],
+        [86,"Rn","ラドン","noble-gas",18,6,"222","気体","放射線治療、地震予知研究","希ガスで唯一の放射性元素。"],
+        [87,"Fr","フランシウム","alkali-metal",1,7,"223","固体","学術研究","極めて不安定で瞬時に崩壊する。"],
+        [88,"Ra","ラジウム","alkaline-earth-metal",2,7,"226","固体","夜光塗料(旧)、放射線治療","キュリー夫妻が発見。強い放射能。"],
+        [89,"Ac","アクチニウム","actinide",3,10,"227","固体","がん治療、中性子源","青白く光る。アクチノイドの語源。"],
+        [90,"Th","トリウム","actinide",4,10,"232.04","固体","次世代原子炉燃料、カメラレンズ","ウランより豊富。将来のエネルギー源。"],
+        [91,"Pa","プロトアクチニウム","actinide",5,10,"231.04","固体","学術研究","非常に希少で強い放射能と毒性。"],
+        [92,"U","ウラン","actinide",6,10,"238.03","固体","原子力発電、核兵器、ガラス着色","天然にある最も重い元素の一つ。"],
+        [93,"Np","ネプツニウム","actinide",7,10,"237","固体","中性子検出器、核燃料研究","ウランから人工的に作られた最初の超ウラン元素。"],
+        [94,"Pu","プルトニウム","actinide",8,10,"244","固体","原子力発電燃料、宇宙探査機熱源","極めて強力な放射能。軍事・発電に使用。"],
+        [95,"Am","アメリシウム","actinide",9,10,"243","固体","煙探知機、厚さ測定器","一般家庭の煙探知機にも使われる。"],
+        [96,"Cm","キュリウム","actinide",10,10,"247","固体","宇宙探査機X線源","キュリー夫妻にちなむ。アルファ線源。"],
+        [97,"Bk","バークリウム","actinide",11,10,"247","固体","学術研究","バークレー校で発見。研究用のみ。"],
+        [98,"Cf","カリホルニウム","actinide",12,10,"251","固体","中性子源、空港の手荷物検査","高価だが、中性子源として多用途。"],
+        [99,"Es","アインシュタイニウム","actinide",13,10,"252","固体","学術研究","水素爆弾の灰の中から発見。"],
+        [100,"Fm","フェルミウム","actinide",14,10,"257","固体","学術研究","アインシュタイニウムと共に発見。"],
+        [101,"Md","メンデレビウム","actinide",15,10,"258","固体","学術研究","周期表の父メンデレーエフにちなむ。"],
+        [102,"No","ノーベリウム","actinide",16,10,"259","固体","学術研究","ノーベル賞にちなむ人工元素。"],
+        [103,"Lr","ローレンシウム","actinide",17,10,"262","固体","学術研究","サイクロトロン発明者にちなむ。"],
+        [104,"Rf","ラザホージウム","transition-metal",4,7,"267","固体","学術研究","超重元素。非常に短寿命。"],
+        [105,"Db","ドブニウム","transition-metal",5,7,"268","固体","学術研究","ロシアのドブナ研究所にちなむ。"],
+        [106,"Sg","シーボーギウム","transition-metal",6,7,"269","固体","学術研究","シーボーグ博士にちなむ。"],
+        [107,"Bh","ボーリウム","transition-metal",7,7,"270","固体","学術研究","ニールス・ボーアにちなむ。"],
+        [108,"Hs","ハッシウム","transition-metal",8,7,"269","固体","学術研究","ドイツのヘッセン州にちなむ。"],
+        [109,"Mt","マイトネリウム","unknown",9,7,"278","固体","学術研究","リーゼ・マイトナーにちなむ向元素。"],
+        [110,"Ds","ダームスタチウム","unknown",10,7,"281","固体","学術研究","ダームシュタット市にちなむ。"],
+        [111,"Rg","レントゲニウム","unknown",11,7,"282","固体","学術研究","レントゲン博士にちなむ。"],
+        [112,"Cn","コペルニシウム","unknown",12,7,"285","固体","学術研究","コペルニクスにちなむ。"],
+        [113,"Nh","ニホニウム","unknown",13,7,"286","固体","学術研究","日本で発見。アジア初命名。"],
+        [114,"Fl","フレロビウム","unknown",14,7,"289","固体","学術研究","ロシアの研究所にちなむ。"],
+        [115,"Mc","モスコビウム","unknown",15,7,"290","固体","学術研究","モスクワ州にちなむ。"],
+        [116,"Lv","リバモリウム","unknown",16,7,"293","固体","学術研究","リバモア国立研究所にちなむ。"],
+        [117,"Ts","テネシン","unknown",17,7,"294","固体","学術研究","テネシー州にちなむ。"],
+        [118,"Og","オガネソン","unknown",18,7,"294","固体","学術研究","オガネシアン博士にちなむ。"]
+    ];
+
+    const elements = rawData.map(d => ({
+        n: d[0], s: d[1], name: d[2], cat: d[3], x: d[4], y: d[5],
+        mass: d[6], phase: d[7], usage: d[8], desc: d[9]
+    }));
+
+    const categoryNames = {
+        "reactive-nonmetal": "非金属", "noble-gas": "希ガス", "alkali-metal": "アルカリ金属",
+        "alkaline-earth-metal": "アルカリ土類金属", "metalloid": "半金属", "post-transition-metal": "遷移後金属",
+        "transition-metal": "遷移金属", "lanthanide": "ランタノイド", "actinide": "アクチノイド", "unknown": "未知の元素"
+    };
+
+    let userAppData = JSON.parse(localStorage.getItem('periodicTableUserData')) || {
+        favorites: [],
+        memos: {}
+    };
+
+    function saveData() {
+        localStorage.setItem('periodicTableUserData', JSON.stringify(userAppData));
+    }
+
+    function renderTable() {
+        const main = document.getElementById('main-grid');
+        const sub = document.getElementById('sub-grid');
+        main.innerHTML = '';
+        sub.innerHTML = '';
+        
+        elements.forEach(el => {
+            const card = document.createElement('div');
+            const isFav = userAppData.favorites.includes(el.n);
+            const hasMemo = !!userAppData.memos[el.n];
+            card.className = `element-card ${el.cat} ${isFav ? 'is-favorite' : ''} ${hasMemo ? 'has-memo' : ''}`;
+            card.innerHTML = `
+                <span class="favorite-mark">★</span>
+                <span class="atomic-number">${el.n}</span>
+                <span class="symbol">${el.s}</span>
+                <span class="name">${el.name}</span>
+                <span class="memo-indicator"></span>
+            `;
+            card.setAttribute('data-n', el.n);
+            card.setAttribute('data-s', el.s.toLowerCase());
+            card.setAttribute('data-name', el.name);
+            card.setAttribute('data-memo', userAppData.memos[el.n] || '');
+            card.setAttribute('data-cat', el.cat);
+            card.onclick = () => showDetail(el);
+            
+            if (el.y <= 7) {
+                card.style.gridColumn = el.x;
+                card.style.gridRow = el.y;
+                main.appendChild(card);
+            } else {
+                card.style.gridColumn = el.x + 2;
+                sub.appendChild(card);
+            }
+        });
+        filter();
+    }
+
+    let currentEditingN = null;
+
+    function showDetail(el) {
+        currentEditingN = el.n;
+        const modal = document.getElementById('detail-modal');
+        const header = document.getElementById('modal-header');
+        const color = getComputedStyle(document.querySelector(`.${el.cat}`)).borderBottomColor;
+        
+        header.style.backgroundColor = color;
+        document.getElementById('modal-atomic-number').innerText = el.n;
+        document.getElementById('modal-symbol').innerText = el.s;
+        document.getElementById('modal-name').innerText = el.name;
+        document.getElementById('modal-category-badge').innerText = categoryNames[el.cat];
+        document.getElementById('modal-mass').innerText = el.mass;
+        document.getElementById('modal-phase').innerText = el.phase;
+        document.getElementById('modal-usage').innerText = el.usage;
+        document.getElementById('modal-desc').innerText = el.desc;
+
+        const memoArea = document.getElementById('modal-memo');
+        memoArea.value = userAppData.memos[el.n] || '';
+        memoArea.oninput = (e) => {
+            const val = e.target.value.trim();
+            if (val) {
+                userAppData.memos[el.n] = val;
+            } else {
+                delete userAppData.memos[el.n];
+            }
+            saveData();
+            
+            const card = document.querySelector(`.element-card[data-n="${el.n}"]`);
+            if (card) {
+                card.setAttribute('data-memo', val);
+                card.classList.toggle('has-memo', !!val);
+            }
+        };
+
+        updateFavButton();
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+
+    function toggleFavorite() {
+        if (!currentEditingN) return;
+        const index = userAppData.favorites.indexOf(currentEditingN);
+        if (index > -1) {
+            userAppData.favorites.splice(index, 1);
+        } else {
+            userAppData.favorites.push(currentEditingN);
+        }
+        saveData();
+        updateFavButton();
+        const card = document.querySelector(`.element-card[data-n="${currentEditingN}"]`);
+        if (card) card.classList.toggle('is-favorite', userAppData.favorites.includes(currentEditingN));
+    }
+
+    function updateFavButton() {
+        const btn = document.getElementById('favorite-btn');
+        const icon = document.getElementById('fav-icon');
+        const isFav = userAppData.favorites.includes(currentEditingN);
+        
+        if (isFav) {
+            icon.setAttribute('fill', 'currentColor');
+            btn.classList.add('text-yellow-300');
+            btn.classList.remove('text-white');
+        } else {
+            icon.setAttribute('fill', 'none');
+            btn.classList.remove('text-yellow-300');
+            btn.classList.add('text-white');
+        }
+    }
+
+    function closeModal() {
+        document.getElementById('detail-modal').style.display = 'none';
+        document.body.style.overflow = '';
+        currentEditingN = null;
+    }
+
+    function filter() {
+        const q = document.getElementById('search-input').value.toLowerCase();
+        const c = document.getElementById('category-filter').value;
+        document.querySelectorAll('.element-card').forEach(card => {
+            const n = card.getAttribute('data-n');
+            const memo = card.getAttribute('data-memo').toLowerCase();
+            const name = card.getAttribute('data-name');
+            const symbol = card.getAttribute('data-s');
+            
+            const matchS = n.includes(q) || symbol.includes(q) || name.includes(q) || memo.includes(q);
+
+            let matchC = false;
+            if (c === 'all') matchC = true;
+            else if (c === 'fav') matchC = userAppData.favorites.includes(parseInt(n));
+            else matchC = card.getAttribute('data-cat') === c;
+
+            card.classList.toggle('dimmed', !(matchS && matchC));
+        });
+    }
+
+    function exportToCSV() {
+        let csvContent = "\uFEFF"; // UTF-8 BOM
+        csvContent += "原子番号,記号,元素名,分類,原子量,状態,主な用途,お気に入り,学習メモ\n";
+
+        elements.forEach(el => {
+            const isFav = userAppData.favorites.includes(el.n) ? "★" : "";
+            const memo = userAppData.memos[el.n] ? userAppData.memos[el.n].replace(/"/g, '""').replace(/\n/g, ' ') : "";
+            const cat = categoryNames[el.cat] || el.cat;
+            
+            const row = [
+                el.n,
+                el.s,
+                el.name,
+                cat,
+                el.mass,
+                el.phase,
+                `"${el.usage.replace(/"/g, '""')}"`,
+                isFav,
+                `"${memo}"`
+            ];
+            csvContent += row.join(",") + "\n";
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `元素図鑑_MyMemo_${new Date().toISOString().slice(0,10)}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    function importFromCSV(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const content = e.target.result;
+            const lines = content.split(/\r?\n/);
+            
+            // シンプルなCSVパース（ダブルクォート内のカンマ対応）
+            const parseCSVLine = (line) => {
+                const result = [];
+                let current = "";
+                let inQuotes = false;
+                for (let i = 0; i < line.length; i++) {
+                    const char = line[i];
+                    if (char === '"') {
+                        if (inQuotes && line[i+1] === '"') {
+                            current += '"';
+                            i++;
+                        } else {
+                            inQuotes = !inQuotes;
+                        }
+                    } else if (char === ',' && !inQuotes) {
+                        result.push(current);
+                        current = "";
+                    } else {
+                        current += char;
+                    }
+                }
+                result.push(current);
+                return result;
+            };
+
+            let importCount = 0;
+            // 最初の行（ヘッダー）をスキップ
+            for (let i = 1; i < lines.length; i++) {
+                if (!lines[i].trim()) continue;
+                const cols = parseCSVLine(lines[i]);
+                if (cols.length < 9) continue;
+
+                const atomicNumber = parseInt(cols[0]);
+                const isFav = cols[7] === "★";
+                const memo = cols[8].trim();
+
+                if (!isNaN(atomicNumber) && atomicNumber >= 1 && atomicNumber <= 118) {
+                    // お気に入り更新
+                    const favIndex = userAppData.favorites.indexOf(atomicNumber);
+                    if (isFav && favIndex === -1) userAppData.favorites.push(atomicNumber);
+                    if (!isFav && favIndex !== -1) userAppData.favorites.splice(favIndex, 1);
+
+                    // メモ更新（空でなければ追加）
+                    if (memo) {
+                        userAppData.memos[atomicNumber] = memo;
+                    }
+                    importCount++;
+                }
+            }
+
+            if (importCount > 0) {
+                saveData();
+                renderTable();
+                alert(`${importCount}件の元素データをインポートしました。`);
+            } else {
+                alert("有効な元素データが見つかりませんでした。CSVの形式を確認してください。");
+            }
+            // 同じファイルを再度選択できるようにリセット
+            event.target.value = '';
+        };
+        reader.readAsText(file);
+    }
+
+    function clearAllData() {
+        if (confirm('すべてのメモとお気に入りを消去します。よろしいですか？')) {
+            userAppData = { favorites: [], memos: {} };
+            saveData();
+            renderTable();
+        }
+    }
+
+    document.getElementById('search-input').oninput = filter;
+    document.getElementById('category-filter').onchange = filter;
+    window.onload = renderTable;
+</script>
+</body>
+</html>
