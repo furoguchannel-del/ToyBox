@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>絶対湿度・環境判定ツール</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #f0f4f8;
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+        }
+        .card {
+            background: white;
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+        }
+        .result-value {
+            font-variant-numeric: tabular-nums;
+        }
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+        /* Color bar for indicator */
+        .di-bar {
+            height: 8px;
+            border-radius: 4px;
+            background: linear-gradient(to right, #60a5fa 0%, #34d399 30%, #fbbf24 60%, #f87171 100%);
+            position: relative;
+        }
+        .di-needle {
+            position: absolute;
+            top: -4px;
+            width: 4px;
+            height: 16px;
+            background: #1f2937;
+            border-radius: 2px;
+            transition: left 0.3s ease;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-md mx-auto">
+        <header class="mb-8 text-center">
+            <h1 class="text-2xl font-bold text-gray-800">温湿度コンシェルジュ</h1>
+            <p class="text-sm text-gray-500 mt-2">絶対湿度と環境リスクの判定</p>
+        </header>
+
+        <main class="card p-6 mb-6">
+            <!-- Input Section -->
+            <div class="space-y-6">
+                <!-- Temperature Input -->
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-sm font-medium text-gray-700">温度 (℃)</label>
+                        <div class="flex items-center gap-2">
+                            <input type="number" id="tempNumber" min="-10" max="45" step="0.1" value="25.0" 
+                                class="w-20 px-2 py-1 text-right font-bold text-blue-600 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <span class="text-gray-400 text-sm">℃</span>
+                        </div>
+                    </div>
+                    <input type="range" id="tempInput" min="-10" max="45" step="0.1" value="25" 
+                        class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                </div>
+
+                <!-- Humidity Input -->
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-sm font-medium text-gray-700">相対湿度 (%)</label>
+                        <div class="flex items-center gap-2">
+                            <input type="number" id="humNumber" min="0" max="100" step="1" value="50" 
+                                class="w-20 px-2 py-1 text-right font-bold text-blue-600 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <span class="text-gray-400 text-sm">%</span>
+                        </div>
+                    </div>
+                    <input type="range" id="humInput" min="0" max="100" step="1" value="50" 
+                        class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                </div>
+            </div>
+
+            <hr class="my-8 border-gray-100">
+
+            <!-- Result Section -->
+            <div class="text-center mb-8">
+                <div class="text-gray-500 text-sm mb-1">容積絶対湿度</div>
+                <div class="flex items-baseline justify-center gap-1">
+                    <span id="absoluteHumidity" class="text-5xl font-black text-gray-800 result-value">11.5</span>
+                    <span class="text-xl font-bold text-gray-500">g/m³</span>
+                </div>
+            </div>
+
+            <!-- Alerts / Indicators -->
+            <div id="statusContainer" class="space-y-4">
+                <!-- Comfort Index with Visual Bar -->
+                <div class="p-4 rounded-xl space-y-3 bg-gray-50" id="discomfortBox">
+                    <div class="flex items-start gap-3">
+                        <div class="text-2xl" id="discomfortIcon">😊</div>
+                        <div class="flex-1">
+                            <div class="flex justify-between items-center">
+                                <div class="text-xs font-bold uppercase tracking-wider text-gray-400">不快指数 (DI)</div>
+                                <div id="diNumber" class="text-sm font-bold text-gray-700">71.2</div>
+                            </div>
+                            <div id="discomfortText" class="text-sm font-medium text-gray-700 leading-tight mt-1">快適な範囲です。</div>
+                        </div>
+                    </div>
+                    <!-- Indicator Bar -->
+                    <div class="px-1">
+                        <div class="di-bar">
+                            <div id="diNeedle" class="di-needle" style="left: 50%;"></div>
+                        </div>
+                        <div class="flex justify-between text-[10px] text-gray-400 mt-1">
+                            <span>肌寒い</span>
+                            <span>快適</span>
+                            <span>暑い</span>
+                            <span>酷暑</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Winter/Health Alert -->
+                <div class="p-4 rounded-xl flex items-start gap-3" id="healthBox">
+                    <div class="text-2xl" id="healthIcon">✅</div>
+                    <div class="flex-1">
+                        <div class="text-xs font-bold uppercase tracking-wider text-gray-400">健康・乾燥リスク</div>
+                        <div id="healthText" class="text-sm font-medium text-gray-700 leading-tight">適切な湿度です。</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="text-center text-xs text-gray-400 px-4 leading-relaxed">
+            <p>※絶対湿度はテテンズの式に基づき算出しています。</p>
+            <p>※インフルエンザ警戒の目安：絶対湿度 11g/m³ 以下で生存率上昇。</p>
+        </footer>
+    </div>
+
+    <script>
+        const tempInput = document.getElementById('tempInput');
+        const tempNumber = document.getElementById('tempNumber');
+        const humInput = document.getElementById('humInput');
+        const humNumber = document.getElementById('humNumber');
+        
+        const absHumDisplay = document.getElementById('absoluteHumidity');
+        const diNumberDisplay = document.getElementById('diNumber');
+        const diNeedle = document.getElementById('diNeedle');
+        
+        const discomfortBox = document.getElementById('discomfortBox');
+        const discomfortIcon = document.getElementById('discomfortIcon');
+        const discomfortText = document.getElementById('discomfortText');
+        
+        const healthBox = document.getElementById('healthBox');
+        const healthIcon = document.getElementById('healthIcon');
+        const healthText = document.getElementById('healthText');
+
+        function updateValues(source) {
+            let T, U;
+
+            if (source === 'tempInput') {
+                tempNumber.value = parseFloat(tempInput.value).toFixed(1);
+            } else if (source === 'tempNumber') {
+                tempInput.value = tempNumber.value;
+            } else if (source === 'humInput') {
+                humNumber.value = humInput.value;
+            } else if (source === 'humNumber') {
+                humInput.value = humNumber.value;
+            }
+
+            T = parseFloat(tempNumber.value);
+            U = parseFloat(humNumber.value);
+
+            if (isNaN(T)) T = 0;
+            if (isNaN(U)) U = 0;
+
+            calculate(T, U);
+        }
+
+        function calculate(T, U) {
+            const es = 6.1078 * Math.pow(10, (7.5 * T) / (T + 237.3));
+            const e = es * (U / 100);
+            const ah = (217 * e) / (T + 273.15);
+            absHumDisplay.innerText = ah.toFixed(1);
+
+            const di = 0.81 * T + 0.01 * U * (0.99 * T - 14.3) + 46.3;
+            diNumberDisplay.innerText = di.toFixed(1);
+            
+            updateDiscomfortUI(di, T);
+            updateHealthUI(ah, T);
+        }
+
+        function updateDiscomfortUI(di, temp) {
+            let icon = "😊";
+            let text = "快適に過ごせる環境です。";
+            let bgColor = "bg-green-50";
+            
+            // Calculate needle position (assuming DI range 50 to 90 for display)
+            let percentage = ((di - 55) / (90 - 55)) * 100;
+            percentage = Math.max(0, Math.min(100, percentage));
+            diNeedle.style.left = `${percentage}%`;
+
+            if (temp < 15) {
+                icon = "🧥";
+                text = "気温が低いため、湿度に関わらず肌寒さを感じます。";
+                bgColor = "bg-blue-50";
+            } else if (di >= 85) {
+                icon = "🥵";
+                text = "【拒絶】ほぼ全員が暑さによる不快感を感じます。";
+                bgColor = "bg-red-100";
+            } else if (di >= 80) {
+                icon = "😫";
+                text = "【酷暑】汗が止まらず、かなり蒸し暑く感じます。";
+                bgColor = "bg-orange-100";
+            } else if (di >= 75) {
+                icon = "😑";
+                text = "【やや暑い】半分以上の人が不快に感じ始めます。";
+                bgColor = "bg-yellow-50";
+            } else if (di < 60) {
+                icon = "🍃";
+                text = "肌寒さを感じる可能性があります。";
+                bgColor = "bg-blue-50";
+            }
+
+            discomfortIcon.innerText = icon;
+            discomfortText.innerText = text;
+            discomfortBox.className = `p-4 rounded-xl space-y-3 ${bgColor}`;
+        }
+
+        function updateHealthUI(ah, temp) {
+            let icon = "✅";
+            let text = "理想的な湿度です。喉や肌の潤い、ウイルスの抑制に適しています。";
+            let bgColor = "bg-green-50";
+
+            if (ah <= 7) {
+                icon = "🚨";
+                text = "【極めて危険】インフルエンザウイルスが非常に流行しやすい乾燥状態です。加湿を強く推奨します。";
+                bgColor = "bg-red-100";
+            } else if (ah <= 11) {
+                icon = "⚠️";
+                text = "【警戒】空気が乾燥しています。ウイルスの活動が活発になる目安（11g/m³以下）を下回っています。";
+                bgColor = "bg-yellow-50";
+            } else if (ah > 17 && temp > 25) {
+                icon = "🍄";
+                text = "【多湿注意】湿度が高すぎます。カビやダニが発生しやすい環境です。除湿や換気を検討してください。";
+                bgColor = "bg-blue-50";
+            }
+
+            healthIcon.innerText = icon;
+            healthText.innerText = text;
+            healthBox.className = `p-4 rounded-xl flex items-start gap-3 ${bgColor}`;
+        }
+
+        tempInput.addEventListener('input', () => updateValues('tempInput'));
+        tempNumber.addEventListener('input', () => updateValues('tempNumber'));
+        humInput.addEventListener('input', () => updateValues('humInput'));
+        humNumber.addEventListener('input', () => updateValues('humNumber'));
+
+        window.onload = () => updateValues('tempInput');
+    </script>
+</body>
+</html>
