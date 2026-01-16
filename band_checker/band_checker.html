@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日本キャリア バンド対応チェッカー</title>
+    <!-- PWA Settings -->
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#2563eb">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/552/552408.png">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .carrier-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen p-4 md:p-8 font-sans text-slate-900">
+    <div class="max-w-4xl mx-auto">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-slate-800 mb-2">日本キャリア バンド対応チェッカー</h1>
+            <p class="text-slate-600">スペック表のバンド表記（B1/B3/n77など）をそのまま貼り付けて確認できます</p>
+        </header>
+
+        <!-- Input Section -->
+        <div class="bg-white rounded-2xl shadow-sm p-6 mb-8 border border-slate-200">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-2">4G (LTE) バンド</label>
+                    <textarea id="lteInput" rows="3" placeholder="例: B1/B3/B18/B19/B28/B41/B42" 
+                        class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all resize-none"></textarea>
+                    <p class="text-xs text-slate-500 mt-2">B38/B39/B40/B41 のような形式も自動で読み取ります</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-2">5G (NR) バンド</label>
+                    <textarea id="nrInput" rows="3" placeholder="例: n77/n78/n79/n257" 
+                        class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all resize-none"></textarea>
+                    <p class="text-xs text-slate-500 mt-2">ミリ波（n257）も含めて判定可能です</p>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-center">
+                <button id="checkBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-12 rounded-xl transition-all shadow-lg active:transform active:scale-95">
+                    対応状況を判定する
+                </button>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsGrid" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12"></div>
+
+        <!-- Information Footer -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="bg-slate-800 px-6 py-3">
+                <h3 class="text-white font-bold flex items-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    判定のヒント（必須級バンド一覧）
+                </h3>
+            </div>
+            <div class="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 border-b border-slate-100">
+                <div>
+                    <h4 class="font-bold text-blue-800 text-sm mb-2">① 必須級メインバンド</h4>
+                    <p class="text-sm text-slate-600 leading-relaxed">
+                        全国で通信するために必須です。
+                        <span class="block mt-1 font-semibold text-emerald-600">対象: B1, B3</span>
+                    </p>
+                </div>
+                <div>
+                    <h4 class="font-bold text-blue-800 text-sm mb-2">② プラチナバンド</h4>
+                    <p class="text-sm text-slate-600 leading-relaxed">
+                        地下や建物内で重要なバンドです。
+                        <span class="block mt-1 font-semibold text-indigo-600">対象: B8, B18, B19, B28</span>
+                    </p>
+                </div>
+                <div>
+                    <h4 class="font-bold text-blue-800 text-sm mb-2">③ 5G Sub-6</h4>
+                    <p class="text-sm text-slate-600 leading-relaxed">
+                        エリアが広い主流の5G。
+                        <span class="block mt-1 font-semibold text-orange-600">対象: n77, n78, n79</span>
+                    </p>
+                </div>
+                <div>
+                    <h4 class="font-bold text-blue-800 text-sm mb-2">④ 5G ミリ波</h4>
+                    <p class="text-sm text-slate-600 leading-relaxed">
+                        特定の場所での超高速通信。
+                        <span class="block mt-1 font-semibold text-rose-600">対象: n257</span>
+                    </p>
+                </div>
+            </div>
+            <div class="p-4 bg-slate-50 text-center">
+                <p class="text-xs text-slate-500 leading-relaxed">
+                    判定基準: 各社の<b>「必須メインバンド」がすべて</b>あり、かつ<b>「プラチナ」が1つ以上</b>ある場合に「快適」となります。<br>
+                    <span class="text-[10px] text-slate-400">※楽天モバイルのB18/B26はKDDIからのローミング提供バンドです。</span>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // PWA Service Worker Registration using relative path
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('SW registered'))
+                    .catch(err => console.log('SW registration failed:', err));
+            });
+        }
+
+        const carriers = [
+            {
+                name: "NTTドコモ",
+                lte: { main: [1, 3], platinum: [19], sub: [21, 28, 42] },
+                nr: { main: [78, 79], sub: [28], mmWave: [257] }
+            },
+            {
+                name: "au (KDDI)",
+                lte: { main: [1, 3], platinum: [18, 26], sub: [11, 28, 41, 42] },
+                nr: { main: [77, 78], sub: [3, 28, 41], mmWave: [257] }
+            },
+            {
+                name: "ソフトバンク",
+                lte: { main: [1, 3], platinum: [8], sub: [11, 28, 41, 42] },
+                nr: { main: [77], sub: [3, 28], mmWave: [257] }
+            },
+            {
+                name: "楽天モバイル",
+                lte: { main: [3], platinum: [28], sub: [18, 26] },
+                nr: { main: [77], sub: [28], mmWave: [257] }
+            }
+        ];
+
+        function parseFlexibleInput(val) {
+            return val.split(/[^0-9]+/)
+                      .map(s => parseInt(s, 10))
+                      .filter(n => !isNaN(n));
+        }
+
+        function renderResults() {
+            const userLte = parseFlexibleInput(document.getElementById('lteInput').value);
+            const userNr = parseFlexibleInput(document.getElementById('nrInput').value);
+            const resultsGrid = document.getElementById('resultsGrid');
+
+            resultsGrid.innerHTML = '';
+
+            carriers.forEach(carrier => {
+                const isMainOk = carrier.lte.main.every(b => userLte.includes(b));
+                const isPlatOk = carrier.lte.platinum.some(b => userLte.includes(b));
+                
+                let status = "⚠️ 非対応";
+                let statusClass = "text-red-600 bg-red-50 border-red-100";
+                let cardClass = "border-slate-200";
+
+                if (isMainOk && isPlatOk) {
+                    status = "✅ 快適に使用可能";
+                    statusClass = "text-green-700 bg-green-50 border-green-200";
+                    cardClass = "border-green-500 ring-1 ring-green-500 shadow-md";
+                } else if (isMainOk) {
+                    status = "🟡 一部対応（プラチナ不足）";
+                    statusClass = "text-amber-700 bg-amber-50 border-amber-200";
+                }
+
+                const card = document.createElement('div');
+                card.className = `carrier-card bg-white rounded-2xl border p-6 flex flex-col ${cardClass}`;
+                
+                card.innerHTML = `
+                    <div class="flex flex-col mb-4">
+                        <h2 class="text-xl font-bold text-slate-800">${carrier.name}</h2>
+                        <div class="mt-2 px-3 py-1 rounded-full text-xs font-bold border ${statusClass} inline-block w-fit">
+                            ${status}
+                        </div>
+                    </div>
+                    <div class="space-y-4 flex-grow">
+                        <div>
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 class="text-[10px] font-bold uppercase tracking-wider text-slate-400">4G LTE (B)</h4>
+                            </div>
+                            <div class="flex flex-wrap gap-1.5">
+                                ${renderChips(carrier.lte.main, userLte, '必須', 'B', carrier.name)}
+                                ${renderChips(carrier.lte.platinum, userLte, 'プラチナ', 'B', carrier.name)}
+                                ${renderChips(carrier.lte.sub, userLte, '補助', 'B', carrier.name)}
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 class="text-[10px] font-bold uppercase tracking-wider text-slate-400">5G NR (n)</h4>
+                            </div>
+                            <div class="flex flex-wrap gap-1.5">
+                                ${renderChips(carrier.nr.main, userNr, 'メイン', 'n', carrier.name)}
+                                ${renderChips(carrier.nr.sub, userNr, '転用', 'n', carrier.name)}
+                                ${renderChips(carrier.nr.mmWave, userNr, 'ミリ波', 'n', carrier.name)}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                resultsGrid.appendChild(card);
+            });
+        }
+
+        function renderChips(targetBands, userBands, label, prefix, carrierName) {
+            return targetBands.map(b => {
+                const isMatch = userBands.includes(b);
+                const isPlat = label === 'プラチナ';
+                const isEssential = label === '必須' || label === 'メイン';
+                const isMMW = label === 'ミリ波';
+                const isRoaming = carrierName === "楽天モバイル" && (b === 18 || b === 26);
+                const base = "px-2 py-1 rounded text-[10px] font-bold border transition-all relative";
+                let badge = "";
+                
+                if (isRoaming) badge = `<span class="absolute -top-2 -left-1 text-[8px] px-1 bg-amber-100 text-amber-700 rounded border border-amber-200 scale-75 z-10">ローミング</span>`;
+                else if (isEssential) badge = `<span class="absolute -top-2 -left-1 text-[8px] px-1 bg-emerald-100 text-emerald-700 rounded border border-emerald-200 scale-75 z-10">必須</span>`;
+                else if (isPlat) badge = `<span class="absolute -top-2 -left-1 text-[8px] px-1 bg-indigo-100 text-indigo-700 rounded border border-indigo-200 scale-75 z-10">プラチナ</span>`;
+                else if (isMMW) badge = `<span class="absolute -top-2 -left-1 text-[8px] px-1 bg-rose-100 text-rose-700 rounded border border-rose-200 scale-75 z-10">ミリ波</span>`;
+                
+                let color = isMatch 
+                    ? (isPlat ? "bg-indigo-600 border-indigo-700 text-white shadow-sm" : 
+                       isEssential ? "bg-emerald-500 border-emerald-600 text-white shadow-sm" : 
+                       isMMW ? "bg-rose-500 border-rose-600 text-white shadow-sm" :
+                       isRoaming ? "bg-amber-500 border-amber-600 text-white shadow-sm" :
+                       "bg-slate-500 border-slate-600 text-white") 
+                    : "bg-slate-50 border-slate-200 text-slate-300";
+                
+                return `<div class="relative mt-1 mb-1">${badge}<span class="${base} ${color}">${prefix}${b}</span></div>`;
+            }).join('');
+        }
+
+        document.getElementById('checkBtn').addEventListener('click', renderResults);
+        renderResults();
+    </script>
+</body>
+</html>
