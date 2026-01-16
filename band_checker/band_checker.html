@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>キャリアバンド対応チェッカー</title>
     <!-- PWA Settings -->
-    <link rel="manifest" href="./manifest.json">
+    <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2563eb">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/552/552408.png">
     
@@ -13,6 +13,42 @@
     <style>
         .carrier-card {
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        /* ラベルが付くコンテナの調整 */
+        .chip-container {
+            position: relative;
+            margin-top: 0.8rem; /* ラベル用の隙間 */
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        /* プラチナ・ローミングが付くチップのみ幅を微調整 (2.2rem) */
+        .has-long-label {
+            min-width: 2.2rem;
+        }
+        /* ラベル（バッジ）のスタイル */
+        .badge-label {
+            position: absolute;
+            top: -0.9rem;
+            left: 0;
+            font-size: 8px;
+            white-space: nowrap;
+            transform: scale(0.75);
+            transform-origin: left bottom;
+            padding: 0 2px;
+            border-radius: 2px;
+            z-index: 10;
+        }
+        /* チップ自体の基本スタイル */
+        .band-chip {
+            width: 100%;
+            text-align: center;
+            padding: 1px 4px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: bold;
+            border-width: 1px;
+            display: block;
         }
     </style>
 </head>
@@ -60,31 +96,19 @@
             <div class="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 border-b border-slate-100">
                 <div>
                     <h4 class="font-bold text-blue-800 text-sm mb-2">① 必須級メインバンド</h4>
-                    <p class="text-sm text-slate-600 leading-relaxed">
-                        全国で通信するために必須です。
-                        <span class="block mt-1 font-semibold text-emerald-600">対象: B1, B3</span>
-                    </p>
+                    <p class="text-sm text-slate-600 leading-relaxed">全国通信に必須。<span class="block mt-1 font-semibold text-emerald-600">対象: B1, B3</span></p>
                 </div>
                 <div>
                     <h4 class="font-bold text-blue-800 text-sm mb-2">② プラチナバンド</h4>
-                    <p class="text-sm text-slate-600 leading-relaxed">
-                        地下や建物内で重要なバンドです。
-                        <span class="block mt-1 font-semibold text-indigo-600">対象: B8, B18, B19, B28</span>
-                    </p>
+                    <p class="text-sm text-slate-600 leading-relaxed">地下や建物内で重要。<span class="block mt-1 font-semibold text-indigo-600">対象: B8, B18, B19, B28</span></p>
                 </div>
                 <div>
                     <h4 class="font-bold text-blue-800 text-sm mb-2">③ 5G Sub-6</h4>
-                    <p class="text-sm text-slate-600 leading-relaxed">
-                        エリアが広い主流の5G。
-                        <span class="block mt-1 font-semibold text-orange-600">対象: n77, n78, n79</span>
-                    </p>
+                    <p class="text-sm text-slate-600 leading-relaxed">エリアが広い主流の5G。<span class="block mt-1 font-semibold text-orange-600">対象: n77, n78, n79</span></p>
                 </div>
                 <div>
                     <h4 class="font-bold text-blue-800 text-sm mb-2">④ 5G ミリ波</h4>
-                    <p class="text-sm text-slate-600 leading-relaxed">
-                        特定の場所での超高速通信。
-                        <span class="block mt-1 font-semibold text-rose-600">対象: n257</span>
-                    </p>
+                    <p class="text-sm text-slate-600 leading-relaxed">超高速通信用。<span class="block mt-1 font-semibold text-rose-600">対象: n257</span></p>
                 </div>
             </div>
             <div class="p-4 bg-slate-50 text-center">
@@ -97,12 +121,11 @@
     </div>
 
     <script>
-        // PWA Service Worker Registration using relative path
+        // PWA Service Worker Registration
+        // アプリの更新を正しく行うため、登録処理を維持します
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then(reg => console.log('SW registered'))
-                    .catch(err => console.log('SW registration failed:', err));
+                navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW registration failed:', err));
             });
         }
 
@@ -139,7 +162,6 @@
             const userLte = parseFlexibleInput(document.getElementById('lteInput').value);
             const userNr = parseFlexibleInput(document.getElementById('nrInput').value);
             const resultsGrid = document.getElementById('resultsGrid');
-
             resultsGrid.innerHTML = '';
 
             carriers.forEach(carrier => {
@@ -169,22 +191,22 @@
                             ${status}
                         </div>
                     </div>
-                    <div class="space-y-4 flex-grow">
+                    <div class="space-y-6 flex-grow">
                         <div>
-                            <div class="flex justify-between items-center mb-2">
+                            <div class="flex justify-between items-center mb-1">
                                 <h4 class="text-[10px] font-bold uppercase tracking-wider text-slate-400">4G LTE (B)</h4>
                             </div>
-                            <div class="flex flex-wrap gap-1.5">
+                            <div class="flex flex-wrap gap-x-2 gap-y-1">
                                 ${renderChips(carrier.lte.main, userLte, '必須', 'B', carrier.name)}
                                 ${renderChips(carrier.lte.platinum, userLte, 'プラチナ', 'B', carrier.name)}
                                 ${renderChips(carrier.lte.sub, userLte, '補助', 'B', carrier.name)}
                             </div>
                         </div>
                         <div>
-                            <div class="flex justify-between items-center mb-2">
+                            <div class="flex justify-between items-center mb-1">
                                 <h4 class="text-[10px] font-bold uppercase tracking-wider text-slate-400">5G NR (n)</h4>
                             </div>
-                            <div class="flex flex-wrap gap-1.5">
+                            <div class="flex flex-wrap gap-x-2 gap-y-1">
                                 ${renderChips(carrier.nr.main, userNr, 'メイン', 'n', carrier.name)}
                                 ${renderChips(carrier.nr.sub, userNr, '転用', 'n', carrier.name)}
                                 ${renderChips(carrier.nr.mmWave, userNr, 'ミリ波', 'n', carrier.name)}
@@ -203,13 +225,21 @@
                 const isEssential = label === '必須' || label === 'メイン';
                 const isMMW = label === 'ミリ波';
                 const isRoaming = carrierName === "楽天モバイル" && (b === 18 || b === 26);
-                const base = "px-2 py-1 rounded text-[10px] font-bold border transition-all relative";
-                let badge = "";
                 
-                if (isRoaming) badge = `<span class="absolute -top-2 -left-1 text-[8px] px-1 bg-amber-100 text-amber-700 rounded border border-amber-200 scale-75 z-10">ローミング</span>`;
-                else if (isEssential) badge = `<span class="absolute -top-2 -left-1 text-[8px] px-1 bg-emerald-100 text-emerald-700 rounded border border-emerald-200 scale-75 z-10">必須</span>`;
-                else if (isPlat) badge = `<span class="absolute -top-2 -left-1 text-[8px] px-1 bg-indigo-100 text-indigo-700 rounded border border-indigo-200 scale-75 z-10">プラチナ</span>`;
-                else if (isMMW) badge = `<span class="absolute -top-2 -left-1 text-[8px] px-1 bg-rose-100 text-rose-700 rounded border border-rose-200 scale-75 z-10">ミリ波</span>`;
+                let badge = "";
+                let longLabelClass = "";
+                
+                if (isRoaming) {
+                    badge = `<span class="badge-label bg-amber-100 text-amber-700 border border-amber-200">ローミング</span>`;
+                    longLabelClass = "has-long-label";
+                } else if (isEssential) {
+                    badge = `<span class="badge-label bg-emerald-100 text-emerald-700 border border-emerald-200">必須</span>`;
+                } else if (isPlat) {
+                    badge = `<span class="badge-label bg-indigo-100 text-indigo-700 border border-indigo-200">プラチナ</span>`;
+                    longLabelClass = "has-long-label";
+                } else if (isMMW) {
+                    badge = `<span class="badge-label bg-rose-100 text-rose-700 border border-rose-200">ミリ波</span>`;
+                }
                 
                 let color = isMatch 
                     ? (isPlat ? "bg-indigo-600 border-indigo-700 text-white shadow-sm" : 
@@ -219,7 +249,12 @@
                        "bg-slate-500 border-slate-600 text-white") 
                     : "bg-slate-50 border-slate-200 text-slate-300";
                 
-                return `<div class="relative mt-1 mb-1">${badge}<span class="${base} ${color}">${prefix}${b}</span></div>`;
+                return `
+                    <div class="chip-container ${longLabelClass}">
+                        ${badge}
+                        <span class="band-chip ${color}">${prefix}${b}</span>
+                    </div>
+                `;
             }).join('');
         }
 
