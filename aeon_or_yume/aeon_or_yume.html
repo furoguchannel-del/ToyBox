@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>イオン vs ゆめタウン判定機</title>
+
+<style>
+body {
+  background: radial-gradient(#bde 20%, #9cd 21%) 0 0/40px 40px;
+  font-family: "MS Gothic", monospace;
+  text-align: center;
+}
+
+#title {
+  font-size: 32px;
+  font-weight: bold;
+  margin-top: 20px;
+  background: linear-gradient(to right, red, yellow, green, cyan, blue, magenta);
+  -webkit-background-clip: text;
+  color: transparent;
+  text-shadow: 2px 2px #fff;
+}
+
+#desc {
+  margin-top: 10px;
+  font-size: 16px;
+  color: #000080;
+}
+
+.sorry {
+  color: magenta;
+  font-size: 20px;
+  font-style: italic;
+}
+
+.box {
+  width: 700px;
+  margin: 20px auto;
+  background: #fff;
+  border: 3px ridge #000;
+  padding: 15px;
+}
+
+#drop-area {
+  border: 2px dashed red;
+  padding: 15px;
+  background: #ffffcc;
+}
+
+.result {
+  margin-top: 15px;
+  padding: 10px;
+  color: #fff;
+  font-weight: bold;
+}
+
+button {
+  margin-top: 10px;
+  padding: 8px 16px;
+  border: 2px outset #000;
+  background: #ccc;
+  font-family: "MS Gothic";
+  cursor: pointer;
+}
+
+a {
+  color: blue;
+  text-decoration: underline;
+}
+
+@media (max-width: 750px) {
+  .box { width: 95%; }
+}
+</style>
+</head>
+
+<body>
+
+<div id="capture-area">
+
+<div id="title">イオン vs ゆめタウン判定機</div>
+
+<div id="desc">
+画像の色から、イオンかゆめタウンかを判定します
+</div>
+
+<div class="sorry">Sorry Japanese Only</div>
+
+<div class="box">
+
+<div id="drop-area">
+ここに画像をドラッグ＆ドロップ<br>
+または<br>
+<input type="file" id="file">
+</div>
+
+<br>
+
+<label>
+<input type="radio" name="mode" value="avg" checked>
+平均色
+</label>
+
+<label>
+<input type="radio" name="mode" value="kmeans">
+代表色（K-means）
+</label>
+
+<br><br>
+
+<img id="preview" width="300">
+
+<div class="result" id="result"></div>
+<div id="detail"></div>
+
+<br>
+
+<button onclick="savePage()">ページを画像保存</button>
+
+</div>
+
+<hr>
+
+<div class="box">
+<b>参考文献</b>
+<ol style="text-align:left;">
+<li>
+イオン株式会社 商標情報  
+<a href="https://www.j-platpat.inpit.go.jp/c1801/TR/JP-2015-029878/40/ja" target="_blank">
+JP-2015-029878
+</a>
+</li>
+<li>
+株式会社イズミ 商標情報  
+<a href="https://www.j-platpat.inpit.go.jp/c1801/TR/JP-2015-052130/40/ja" target="_blank">
+JP-2015-052130
+</a>
+</li>
+</ol>
+</div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+<script>
+// ===== 基準色 =====
+const AEON_RGB = [182,0,129];
+const YUME_RGB = [199,0,120];
+
+const AEON_HSV = rgbToHsv(...AEON_RGB);
+const YUME_HSV = rgbToHsv(...YUME_RGB);
+
+let last = "";
+let currentImage = null;
+
+// ===== RGB → HSV =====
+function rgbToHsv(r,g,b){
+  r/=255; g/=255; b/=255;
+  let max=Math.max(r,g,b), min=Math.min(r,g,b);
+  let d=max-min;
+  let h=0;
+
+  if(d!==0){
+    if(max===r) h=((g-b)/d)%6;
+    else if(max===g) h=(b-r)/d+2;
+    else h=(r-g)/d+4;
+    h*=60;
+    if(h<0) h+=360;
+  }
+
+  let s=max===0?0:d/max;
+  let v=max;
+
+  return [h,s,v];
+}
+
+// ===== HSV距離 =====
+function hsvDistance(a,b){
+  let dh=Math.abs(a[0]-b[0]);
+  dh=Math.min(dh,360-dh)/180;
+
+  let ds=Math.abs(a[1]-b[1]);
+  let dv=Math.abs(a[2]-b[2]);
+
+  return Math.sqrt((dh*3)**2 + (ds*0.8)**2 + (dv*0.6)**2);
+}
+
+// ===== アップロード =====
+document.getElementById("file").addEventListener("change",e=>{
+  handle(e.target.files[0]);
+});
+
+document.getElementById("drop-area").addEventListener("drop",e=>{
+  e.preventDefault();
+  handle(e.dataTransfer.files[0]);
+});
+document.getElementById("drop-area").addEventListener("dragover",e=>e.preventDefault());
+
+function handle(file){
+  if(!file) return;
+  const img=new Image();
+  img.src=URL.createObjectURL(file);
+  img.onload=()=>{
+    currentImage = img;
+    document.getElementById("preview").src=img.src;
+    process(img);
+  };
+}
+
+// ===== モード変更で自動再判定 =====
+document.querySelectorAll('input[name="mode"]').forEach(r=>{
+  r.addEventListener("change", ()=>{
+    if(currentImage) process(currentImage);
+  });
+});
+
+// ===== 画像処理 =====
+function process(img){
+  const c=document.createElement("canvas");
+  const ctx=c.getContext("2d");
+  c.width=100; c.height=100;
+  ctx.drawImage(img,0,0,100,100);
+
+  const data=ctx.getImageData(0,0,100,100).data;
+  let pixels=[];
+
+  for(let i=0;i<data.length;i+=4){
+    if(data[i+3]===0) continue;
+    pixels.push([data[i],data[i+1],data[i+2]]);
+  }
+
+  const mode = document.querySelector('input[name="mode"]:checked').value;
+
+  let color = mode === "kmeans"
+    ? kmeans(pixels,3)
+    : average(pixels);
+
+  judge(color);
+}
+
+// ===== 平均色 =====
+function average(p){
+  let r=0,g=0,b=0;
+  p.forEach(x=>{r+=x[0];g+=x[1];b+=x[2];});
+  return [r/p.length,g/p.length,b/p.length];
+}
+
+// ===== K-means =====
+function kmeans(p,k){
+  let centers=p.slice(0,k),clusters;
+
+  for(let i=0;i<5;i++){
+    clusters=Array.from({length:k},()=>[]);
+    p.forEach(x=>{
+      let idx=0,min=9999;
+      centers.forEach((c,i)=>{
+        let d=(x[0]-c[0])**2+(x[1]-c[1])**2+(x[2]-c[2])**2;
+        if(d<min){min=d;idx=i;}
+      });
+      clusters[idx].push(x);
+    });
+    centers=clusters.map(c=>c.length?average(c):[0,0,0]);
+  }
+
+  let sizes=clusters.map(c=>c.length);
+  return centers[sizes.indexOf(Math.max(...sizes))];
+}
+
+// ===== 判定 =====
+function judge(color){
+  const hsv = rgbToHsv(...color);
+
+  const dA = hsvDistance(hsv, AEON_HSV);
+  const dY = hsvDistance(hsv, YUME_HSV);
+
+  const sA = Math.round((1 - dA) * 100);
+  const sY = Math.round((1 - dY) * 100);
+
+  const maxSim = Math.max(sA, sY);
+
+  let result;
+
+  if(maxSim < 40){
+    result = "どちらでもない";
+  } else {
+    result = dA < dY ? "イオンっぽい" : "ゆめタウンっぽい";
+  }
+
+  let comment;
+
+  if (maxSim >= 90) comment = "ほぼ同じ";
+  else if (maxSim >= 80) comment = "かなり近い";
+  else if (maxSim >= 40) comment = "微妙";
+  else comment = "これはもう別の何か";
+
+  last = `${result}（イオン:${sA}% / ゆめ:${sY}%）`;
+
+  document.getElementById("result").innerText = last;
+  document.getElementById("result").style.background =
+    `rgb(${color[0]},${color[1]},${color[2]})`;
+
+  document.getElementById("detail").innerText = comment;
+}
+
+// ===== ページ保存 =====
+function savePage(){
+  html2canvas(document.getElementById("capture-area")).then(canvas=>{
+    const link=document.createElement("a");
+    link.download="result.png";
+    link.href=canvas.toDataURL();
+    link.click();
+  });
+}
+</script>
+
+</body>
+</html>
