@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文書読み上げプレイヤー (オフライン対応版)</title>
+<style>
+  /* リセット＆基本スタイル */
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+  body {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: #f8fafc;
+    color: #0f172a;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    line-height: 1.5;
+  }
+
+  /* コンテナレイアウト */
+  .app-container {
+    max-width: 42rem;
+    width: 100%;
+    background-color: #ffffff;
+    border-radius: 1rem;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    border: 1px solid #f1f5f9;
+  }
+
+  /* ヘッダー */
+  .app-header {
+    background-color: #2563eb;
+    padding: 1rem 1.5rem;
+    color: #ffffff;
+  }
+  .header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .app-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .network-badge {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+  .network-badge.online {
+    background-color: #dcfce7;
+    color: #166534;
+  }
+  .network-badge.offline {
+    background-color: #fef2f2;
+    color: #991b1b;
+  }
+  .network-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+  }
+  .online .network-dot { background-color: #22c55e; }
+  .offline .network-dot { background-color: #ef4444; }
+
+  .header-subtitle {
+    color: #dbeafe;
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+  }
+
+  /* メインコンテンツ */
+  .main-content {
+    padding: 1.5rem;
+  }
+
+  /* グリッドシステム */
+  .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+  @media (min-width: 768px) {
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+    gap: 1.5rem;
+  }
+  @media (min-width: 768px) {
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  /* ボタン */
+  .btn {
+    font-weight: 700;
+    padding: 1rem 0.75rem;
+    border-radius: 0.75rem;
+    transition: all 0.15s ease-in-out;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 1rem;
+    min-height: 68px;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .btn:active {
+    transform: scale(0.97);
+  }
+  .btn-primary {
+    background-color: #2563eb;
+    color: #ffffff;
+    box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
+  }
+  .btn-primary:hover { background-color: #1d4ed8; }
+  .btn-warning {
+    background-color: #f59e0b;
+    color: #ffffff;
+    box-shadow: 0 4px 6px -1px rgba(245, 158, 11, 0.2);
+  }
+  .btn-warning:hover { background-color: #d97706; }
+  .btn-secondary {
+    background-color: #e2e8f0;
+    color: #334155;
+  }
+  .btn-secondary:hover { background-color: #cbd5e1; }
+  .btn-success {
+    background-color: #059669;
+    color: #ffffff;
+    box-shadow: 0 4px 6px -1px rgba(5, 150, 105, 0.2);
+  }
+  .btn-success:hover { background-color: #047857; }
+
+  .btn-small {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    background-color: #f1f5f9;
+    color: #475569;
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 0.375rem 0.625rem;
+    border-radius: 0.375rem;
+    border: 1px solid #cbd5e1;
+    cursor: pointer;
+  }
+  .btn-small:hover { background-color: #e2e8f0; }
+
+  /* テキストエリア・ハイライト領域 */
+  .section-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #334155;
+  }
+  .text-box {
+    width: 100%;
+    height: 18rem;
+    padding: 1rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.5rem;
+    background-color: #f8fafc;
+    color: #1e293b;
+    font-size: 0.95rem;
+    line-height: 1.625;
+    resize: none;
+    outline: none;
+    font-family: inherit;
+  }
+  .text-box:focus {
+    border-color: #2563eb;
+    background-color: #ffffff;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  }
+  .highlight-box {
+    width: 100%;
+    height: 18rem;
+    padding: 1rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.5rem;
+    background-color: #f1f5f9;
+    color: #1e293b;
+    overflow-y: auto;
+    line-height: 1.625;
+    font-size: 0.95rem;
+  }
+
+  /* 設定パネル */
+  .settings-panel {
+    background-color: rgba(241, 245, 249, 0.6);
+    padding: 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid #e2e8f0;
+  }
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .form-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #334155;
+  }
+  .form-select {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    background-color: #ffffff;
+    border-radius: 0.5rem;
+    padding: 0.625rem;
+    color: #1e293b;
+    outline: none;
+    font-size: 0.875rem;
+  }
+  .form-select:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+  }
+
+  /* スライダー */
+  .slider-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.25rem;
+  }
+  .slider-val {
+    font-family: monospace;
+    font-size: 0.875rem;
+    color: #475569;
+  }
+  input[type="range"] {
+    width: 100%;
+    accent-color: #2563eb;
+    cursor: pointer;
+  }
+
+  /* ユーティリティ */
+  .hidden { display: none !important; }
+  .flex { display: flex; }
+  .items-center { align-items: center; }
+  .justify-between { justify-content: space-between; }
+  .gap-2 { gap: 0.5rem; }
+  .gap-3 { gap: 0.75rem; }
+  .mb-2 { margin-bottom: 0.5rem; }
+  .mb-3 { margin-bottom: 0.75rem; }
+  .mb-4 { margin-bottom: 1rem; }
+  .mb-6 { margin-bottom: 1.5rem; }
+  .mt-1 { margin-top: 0.25rem; }
+  .text-xs { font-size: 0.75rem; }
+  .text-sm { font-size: 0.875rem; }
+  .text-slate-500 { color: #64748b; }
+  .text-slate-600 { color: #475569; }
+  .text-slate-700 { color: #334155; }
+  .font-bold { font-weight: 700; }
+  .active-sentence {
+    background-color: #fde047;
+    font-weight: 600;
+    border-radius: 0.25rem;
+    padding: 0 0.125rem;
+  }
+
+  /* モーダル */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(15, 23, 42, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    z-index: 50;
+  }
+  .modal-card {
+    background-color: #ffffff;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    max-width: 28rem;
+    width: 100%;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  }
+  .modal-info-box {
+    background-color: #eff6ff;
+    border: 1px solid #dbeafe;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 1.25rem;
+    font-size: 0.875rem;
+    color: #1e40af;
+  }
+
+  /* バッジ・通知アイコン */
+  .offline-notice {
+    font-size: 0.75rem;
+    background-color: #fef3c7;
+    border: 1px solid #fde68a;
+    color: #92400e;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    margin-top: 0.5rem;
+  }
+</style>
+</head>
+<body>
+
+<div class="app-container">
+  <!-- ヘッダー -->
+  <div class="app-header">
+    <div class="header-top">
+      <h1 class="app-title">
+        <svg xmlns="http://www.w3.org/2000/svg" style="width: 1.5rem; height: 1.5rem;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+        </svg>
+        文書読み上げプレイヤー
+      </h1>
+      <!-- オンライン/オフライン接続状態バッジ -->
+      <div id="networkStatus" class="network-badge online">
+        <span class="network-dot"></span>
+        <span id="networkText">オンライン</span>
+      </div>
+    </div>
+    <p class="header-subtitle">※ブラウザ標準の音声合成（オフライン対応音声あり）を利用します。</p>
+  </div>
+
+  <div class="main-content">
+    <!-- 再生・録音操作エリア -->
+    <div class="mb-6">
+      <div class="flex items-center justify-between mb-2">
+        <span class="section-label">読み上げ操作</span>
+        <span class="text-xs text-slate-500">スペースキーでも操作できます</span>
+      </div>
+
+      <div class="grid-3">
+        <button id="playBtn" type="button" class="btn btn-primary">
+          <span id="playIcon" class="flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" style="width: 1.75rem; height: 1.75rem;" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+            </svg>
+          </span>
+          <span style="display: flex; flex-direction: column; align-items: flex-start; line-height: 1.2;">
+            <span id="playButtonText">再生</span>
+            <span id="shortcutHint" style="font-size: 11px; font-weight: normal; opacity: 0.9;">Space：再生</span>
+          </span>
+        </button>
+
+        <button id="stopBtn" type="button" class="btn btn-secondary">
+          <svg xmlns="http://www.w3.org/2000/svg" style="width: 1.5rem; height: 1.5rem;" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd" />
+          </svg>
+          停止
+        </button>
+
+        <button id="recordModalBtn" type="button" class="btn btn-success">
+          <svg xmlns="http://www.w3.org/2000/svg" style="width: 1.5rem; height: 1.5rem;" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+          </svg>
+          音声保存
+        </button>
+      </div>
+    </div>
+
+    <!-- 文書テキスト入力＆表示領域 -->
+    <div class="mb-6" style="position: relative;">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <label for="scriptText" class="section-label">文書テキスト</label>
+          <button id="pasteBtn" class="btn-small">
+            <svg xmlns="http://www.w3.org/2000/svg" style="width: 1rem; height: 1rem;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+            貼り付け
+          </button>
+        </div>
+        <div class="text-xs text-slate-600" style="background-color: #e2e8f0; padding: 0.25rem 0.625rem; border-radius: 0.375rem;">
+          文字数: <span id="charCount" class="font-bold text-slate-700">0</span>文字 / 目安: <span id="estTime" class="font-bold text-slate-700">0秒</span>
+        </div>
+      </div>
+      
+      <!-- 通常編集テキストエリア (初期値は空) -->
+      <textarea id="scriptText" class="text-box" spellcheck="false" placeholder="ここに読み上げたい文章を入力してください..."></textarea>
+
+      <!-- 読み上げ時ハイライト表示コンテナ -->
+      <div id="highlightContainer" class="highlight-box hidden"></div>
+    </div>
+
+    <!-- 設定パネル -->
+    <div class="mb-2">
+      <span class="section-label">読み上げ設定</span>
+    </div>
+    <div class="settings-panel">
+      <div class="grid-2">
+        <!-- 声と言語 -->
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+          <div class="form-group">
+            <label for="langSelect" class="form-label">言語 (Language)</label>
+            <select id="langSelect" class="form-select">
+              <option value="ja" selected>日本語</option>
+              <option value="en">英語 (English)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="voiceSelect" class="form-label">声の種類</label>
+            <select id="voiceSelect" class="form-select">
+              <option value="">（音声を読み込み中...）</option>
+            </select>
+            <div id="offlineVoiceNotice" class="offline-notice hidden">
+              💡 オフライン環境です。「[オフライン対応]」と記載のある音声のみ再生可能です。
+            </div>
+          </div>
+        </div>
+
+        <!-- 調整スライダー -->
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+          <div>
+            <div class="slider-header">
+              <label for="rateSlider" class="form-label">速さ (Rate)</label>
+              <span id="rateValue" class="slider-val">1.1</span>
+            </div>
+            <input type="range" id="rateSlider" min="0.5" max="2.0" step="0.1" value="1.1">
+          </div>
+          <div>
+            <div class="slider-header">
+              <label for="pitchSlider" class="form-label">高さ (Pitch)</label>
+              <span id="pitchValue" class="slider-val">1.0</span>
+            </div>
+            <input type="range" id="pitchSlider" min="0.0" max="2.0" step="0.1" value="1.0">
+          </div>
+          <div>
+            <div class="slider-header">
+              <label for="volumeSlider" class="form-label">音量 (Volume)</label>
+              <span id="volumeValue" class="slider-val">1.0</span>
+            </div>
+            <input type="range" id="volumeSlider" min="0.0" max="1.0" step="0.1" value="1.0">
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 録音案内モーダル -->
+<div id="recordingModal" class="modal-backdrop hidden">
+  <div class="modal-card">
+    <h3 class="font-bold text-slate-700 mb-3" style="font-size: 1.125rem; display: flex; align-items: center; gap: 0.5rem;">
+      <svg xmlns="http://www.w3.org/2000/svg" style="width: 1.5rem; height: 1.5rem; color: #059669;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+      </svg>
+      音声保存の手順
+    </h3>
+    <p class="text-sm text-slate-600 mb-4">
+      ブラウザの仕様により、「タブの共有」機能を利用して読み上げ音声を直接録音・保存します。
+    </p>
+    <div class="modal-info-box">
+      <p class="font-bold mb-1">【操作手順】</p>
+      <ol style="padding-left: 1.25rem; line-height: 1.6;">
+        <li>次の画面で<strong>「Chrome タブ」</strong>を選択</li>
+        <li>現在のタブ（文書読み上げプレイヤー）を選択</li>
+        <li>下部の<strong style="color: #dc2626;">「タブの音声も共有」に必ずチェック</strong>を入れる</li>
+        <li>「共有」を押すと同時に再生と録音が始まります</li>
+      </ol>
+      <p style="margin-top: 0.5rem; font-size: 0.75rem; color: #2563eb;">※終了後、高品質な <strong>.wav</strong> ファイルとして保存されます。</p>
+    </div>
+    <div style="display: flex; gap: 0.75rem;">
+      <button id="cancelRecordBtn" class="btn btn-secondary" style="flex: 1; min-height: 44px; padding: 0.5rem;">キャンセル</button>
+      <button id="startRecordActionBtn" class="btn btn-success" style="flex: 1; min-height: 44px; padding: 0.5rem;">録音開始</button>
+    </div>
+  </div>
+</div>
+
+<!-- エラーモーダル -->
+<div id="errorModal" class="modal-backdrop hidden">
+  <div class="modal-card" style="text-align: center; max-width: 22rem;">
+    <h3 class="font-bold text-slate-700 mb-2">お知らせ / エラー</h3>
+    <p id="errorMessage" class="text-sm text-slate-600 mb-6" style="white-space: pre-wrap; text-align: left;"></p>
+    <button id="closeErrorBtn" class="btn btn-primary" style="width: 100%; min-height: 44px;">閉じる</button>
+  </div>
+</div>
+
+<script>
+  // UI要素参照
+  const scriptText = document.getElementById('scriptText');
+  const highlightContainer = document.getElementById('highlightContainer');
+  const playBtn = document.getElementById('playBtn');
+  const playIcon = document.getElementById('playIcon');
+  const playButtonText = document.getElementById('playButtonText');
+  const shortcutHint = document.getElementById('shortcutHint');
+  const stopBtn = document.getElementById('stopBtn');
+  const voiceSelect = document.getElementById('voiceSelect');
+  const langSelect = document.getElementById('langSelect');
+  const rateSlider = document.getElementById('rateSlider');
+  const rateValue = document.getElementById('rateValue');
+  const pitchSlider = document.getElementById('pitchSlider');
+  const pitchValue = document.getElementById('pitchValue');
+  const volumeSlider = document.getElementById('volumeSlider');
+  const volumeValue = document.getElementById('volumeValue');
+  const charCountEl = document.getElementById('charCount');
+  const estTimeEl = document.getElementById('estTime');
+  const pasteBtn = document.getElementById('pasteBtn');
+  const networkStatus = document.getElementById('networkStatus');
+  const networkText = document.getElementById('networkText');
+  const offlineVoiceNotice = document.getElementById('offlineVoiceNotice');
+
+  // 録音・モーダル関連
+  const recordModalBtn = document.getElementById('recordModalBtn');
+  const recordingModal = document.getElementById('recordingModal');
+  const startRecordActionBtn = document.getElementById('startRecordActionBtn');
+  const cancelRecordBtn = document.getElementById('cancelRecordBtn');
+  const errorModal = document.getElementById('errorModal');
+  const errorMessage = document.getElementById('errorMessage');
+  const closeErrorBtn = document.getElementById('closeErrorBtn');
+
+  let synth = window.speechSynthesis;
+  let voices = [];
+  let sentenceBounds = [];
+  let currentSpanId = -1;
+  let mediaRecorder = null;
+  let recordedChunks = [];
+  let activeStream = null;
+
+  // ネットワーク状態（オンライン/オフライン）監視
+  function updateNetworkStatus() {
+    const isOnline = navigator.onLine;
+    if (isOnline) {
+      networkStatus.className = 'network-badge online';
+      networkText.textContent = 'オンライン';
+      offlineVoiceNotice.classList.add('hidden');
+    } else {
+      networkStatus.className = 'network-badge offline';
+      networkText.textContent = 'オフライン';
+      offlineVoiceNotice.classList.remove('hidden');
+    }
+    // オフラインに切り替わった場合、声リストを再構成して表示を更新
+    populateVoiceList();
+  }
+
+  window.addEventListener('online', updateNetworkStatus);
+  window.addEventListener('offline', updateNetworkStatus);
+  updateNetworkStatus();
+
+  // 音声リストの生成（voice.localService 判別機能追加）
+  function populateVoiceList() {
+    if (!synth) return;
+    const selectedLang = langSelect.value;
+    const allVoices = synth.getVoices();
+    
+    // 指定言語にマッチする音声を抽出
+    voices = allVoices.filter(voice => voice.lang.startsWith(selectedLang));
+
+    // オフライン（localService）対応音声を上位にソート
+    voices.sort((a, b) => {
+      if (a.localService === b.localService) return 0;
+      return a.localService ? -1 : 1;
+    });
+
+    voiceSelect.innerHTML = '';
+    
+    if (voices.length === 0) {
+      const option = document.createElement('option');
+      option.textContent = selectedLang === 'ja' ? "該当する音声が見つかりません" : "No voices available";
+      voiceSelect.appendChild(option);
+      return;
+    }
+
+    let defaultSelectedIndex = -1;
+
+    voices.forEach((voice, i) => {
+      const option = document.createElement('option');
+      
+      // オフラインで使えるかどうか（localService === true）のバッジ付与
+      const isLocal = voice.localService;
+      const tag = isLocal ? ' [オフライン対応]' : ' (クラウド/オンライン専用)';
+      
+      option.textContent = `${voice.name}${tag}`;
+      option.value = i;
+
+      // オフライン時、またはローカル音声を優先的にデフォルト選択
+      if (isLocal && defaultSelectedIndex === -1) {
+        defaultSelectedIndex = i;
+      }
+
+      voiceSelect.appendChild(option);
+    });
+
+    // オフライン状態の場合、またはローカル音声があれば自動選択
+    if (!navigator.onLine && defaultSelectedIndex !== -1) {
+      voiceSelect.value = defaultSelectedIndex;
+    } else if (defaultSelectedIndex !== -1 && voiceSelect.value === "") {
+      voiceSelect.value = defaultSelectedIndex;
+    }
+  }
+
+  if (speechSynthesis.onvoiceschanged !== undefined) {
+    speechSynthesis.onvoiceschanged = populateVoiceList;
+  }
+  populateVoiceList();
+
+  langSelect.addEventListener('change', populateVoiceList);
+
+  // 再生状態表示更新
+  function updatePlaybackStatus(status) {
+    if (status === 'playing') {
+      playBtn.className = 'btn btn-warning';
+      playIcon.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" style="width: 1.75rem; height: 1.75rem;" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 7a1 1 0 012 0v6a1 1 0 11-2 0V7zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V7z" clip-rule="evenodd" />
+        </svg>`;
+      playButtonText.textContent = '一時停止';
+      shortcutHint.textContent = 'Space：一時停止';
+    } else if (status === 'paused') {
+      playBtn.className = 'btn btn-primary';
+      playIcon.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" style="width: 1.75rem; height: 1.75rem;" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+        </svg>`;
+      playButtonText.textContent = '再開';
+      shortcutHint.textContent = 'Space：再開';
+    } else {
+      playBtn.className = 'btn btn-primary';
+      playIcon.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" style="width: 1.75rem; height: 1.75rem;" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+        </svg>`;
+      playButtonText.textContent = '再生';
+      shortcutHint.textContent = 'Space：再生';
+    }
+  }
+
+  // 文字数と予想時間計算
+  function updateTextStats() {
+    const text = scriptText.value;
+    const length = text.length;
+    charCountEl.textContent = length.toLocaleString();
+
+    if (length === 0) {
+      estTimeEl.textContent = '0秒';
+      return;
+    }
+
+    const currentRate = parseFloat(rateSlider.value);
+    const charsPerSecond = 5 * currentRate; 
+    const totalSeconds = Math.ceil(length / charsPerSecond);
+    
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    
+    estTimeEl.textContent = minutes > 0 ? `約${minutes}分${seconds}秒` : `約${seconds}秒`;
+  }
+
+  scriptText.addEventListener('input', updateTextStats);
+  updateTextStats();
+
+  // スライダー連携
+  [
+    { slider: rateSlider, display: rateValue, triggerUpdate: true },
+    { slider: pitchSlider, display: pitchValue, triggerUpdate: false },
+    { slider: volumeSlider, display: volumeValue, triggerUpdate: false }
+  ].forEach(item => {
+    item.slider.addEventListener('input', () => {
+      item.display.textContent = Number(item.slider.value).toFixed(1);
+      if (item.triggerUpdate) updateTextStats();
+    });
+  });
+
+  function resetUI() {
+    scriptText.classList.remove('hidden');
+    highlightContainer.classList.add('hidden');
+    highlightContainer.innerHTML = '';
+    currentSpanId = -1;
+    updatePlaybackStatus('stopped');
+  }
+
+  function prepareHighlight(text) {
+    sentenceBounds = [];
+    let displayHTML = [];
+    let currentSentence = "";
+    let startIndex = 0;
+    let spanIndex = 0;
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      currentSentence += char;
+      if (['。', '！', '？', '\n', '.', '!', '?'].includes(char) || i === text.length - 1) {
+        sentenceBounds.push({ start: startIndex, end: i + 1, id: spanIndex });
+        let escapedText = currentSentence.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        escapedText = escapedText.replace(/\n/g, '<br>');
+        displayHTML.push(`<span id="sent-${spanIndex}" style="transition: background-color 0.2s;">${escapedText}</span>`);
+        startIndex = i + 1;
+        currentSentence = "";
+        spanIndex++;
+      }
+    }
+    highlightContainer.innerHTML = displayHTML.join('');
+    scriptText.classList.add('hidden');
+    highlightContainer.classList.remove('hidden');
+  }
+
+  function startSpeaking(onEndCallback = null) {
+    synth.cancel(); 
+    const textToSpeak = scriptText.value;
+    if (textToSpeak.trim() === '') return false;
+
+    // オフライン時にクラウド専用音声が選択されている場合のチェック
+    if (!navigator.onLine && voices.length > 0 && voiceSelect.value !== "") {
+      const selectedVoice = voices[voiceSelect.value];
+      if (selectedVoice && !selectedVoice.localService) {
+        showError("選択中の音声はオンライン専用のため、オフラインでは喋れません。\n「[オフライン対応]」と表示されている声を選択してください。");
+        return false;
+      }
+    }
+
+    prepareHighlight(textToSpeak);
+
+    const utterThis = new SpeechSynthesisUtterance(textToSpeak);
+    if (voices.length > 0 && voiceSelect.value !== "") {
+      utterThis.voice = voices[voiceSelect.value];
+    }
+    utterThis.rate = parseFloat(rateSlider.value); 
+    utterThis.pitch = parseFloat(pitchSlider.value);
+    utterThis.volume = parseFloat(volumeSlider.value);
+    
+    utterThis.onboundary = (event) => {
+      const charIndex = event.charIndex;
+      const bound = sentenceBounds.find(b => charIndex >= b.start && charIndex < b.end);
+      
+      if (bound && bound.id !== currentSpanId) {
+        if (currentSpanId !== -1) {
+          const prevSpan = document.getElementById(`sent-${currentSpanId}`);
+          if (prevSpan) prevSpan.className = '';
+        }
+        const newSpan = document.getElementById(`sent-${bound.id}`);
+        if (newSpan) {
+          newSpan.className = 'active-sentence';
+          newSpan.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        currentSpanId = bound.id;
+      }
+    };
+
+    utterThis.onend = () => { resetUI(); if (onEndCallback) onEndCallback(); };
+    utterThis.onerror = () => { resetUI(); if (onEndCallback) onEndCallback(); };
+
+    synth.speak(utterThis);
+    updatePlaybackStatus('playing');
+    return true;
+  }
+
+  function togglePlayPause() {
+    if (synth.paused) {
+      synth.resume();
+      updatePlaybackStatus('playing');
+    } else if (synth.speaking) {
+      synth.pause();
+      updatePlaybackStatus('paused');
+    } else {
+      startSpeaking();
+    }
+  }
+
+  playBtn.addEventListener('click', togglePlayPause);
+
+  document.addEventListener('keydown', (event) => {
+    const target = event.target;
+    const isTyping = target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || target.tagName === 'SELECT');
+    if (event.code === 'Space' && !isTyping) {
+      event.preventDefault();
+      togglePlayPause();
+    }
+  });
+
+  stopBtn.addEventListener('click', () => {
+    synth.cancel();
+    resetUI();
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+    }
+  });
+
+  // クリップボード貼り付け
+  pasteBtn.addEventListener('click', async () => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        const text = await navigator.clipboard.readText();
+        if (text) {
+          scriptText.value = text;
+          updateTextStats();
+        }
+      } else {
+        showError('お使いのブラウザはクリップボード読み取りに対応していません。');
+      }
+    } catch (err) {
+      showError('テキストエリアに直接貼り付け（Ctrl+V / Cmd+V）を行ってください。');
+    }
+  });
+
+  function showError(msg) {
+    errorMessage.textContent = msg;
+    errorModal.classList.remove('hidden');
+  }
+  closeErrorBtn.addEventListener('click', () => errorModal.classList.add('hidden'));
+
+  recordModalBtn.addEventListener('click', () => recordingModal.classList.remove('hidden'));
+  cancelRecordBtn.addEventListener('click', () => recordingModal.classList.add('hidden'));
+
+  // 音声変換・録音処理
+  startRecordActionBtn.addEventListener('click', async () => {
+    recordingModal.classList.add('hidden');
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: true,
+        selfBrowserSurface: "include",
+        preferCurrentTab: true
+      });
+
+      const audioTrack = stream.getAudioTracks()[0];
+      if (!audioTrack) {
+        showError("「タブの音声も共有」にチェックを入れてやり直してください。");
+        stream.getTracks().forEach(t => t.stop());
+        return;
+      }
+
+      activeStream = stream;
+      const audioStream = new MediaStream([audioTrack]);
+      mediaRecorder = new MediaRecorder(audioStream);
+      recordedChunks = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordedChunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        if (activeStream) {
+          activeStream.getTracks().forEach(t => t.stop());
+          activeStream = null;
+        }
+
+        const webmBlob = new Blob(recordedChunks, { type: 'audio/webm' });
+        try {
+          const arrayBuffer = await webmBlob.arrayBuffer();
+          const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+          const wavBlob = audioBufferToWav(audioBuffer);
+          const url = URL.createObjectURL(wavBlob);
+          
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = url;
+          a.download = 'voice_record.wav';
+          document.body.appendChild(a);
+          a.click();
+          
+          setTimeout(() => {
+            URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+          }, 100);
+        } catch (err) {
+          showError("音声ファイルの作成に失敗しました。");
+        }
+      };
+
+      mediaRecorder.start();
+      const isSpeaking = startSpeaking(() => {
+        if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
+      });
+
+      if (!isSpeaking && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+      }
+
+    } catch (err) {
+      if (err.name !== 'NotAllowedError') {
+        showError("録音準備に失敗しました。");
+      }
+    }
+  });
+
+  // WAVエンコーダー関数 (純粋JavaScript)
+  function audioBufferToWav(buffer) {
+    const numChannels = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const format = 1; // PCM
+    const bitDepth = 16;
+    
+    let result;
+    if (numChannels === 2) {
+      const channel1 = buffer.getChannelData(0);
+      const channel2 = buffer.getChannelData(1);
+      const length = channel1.length + channel2.length;
+      result = new Float32Array(length);
+      let index = 0, inputIndex = 0;
+      while (index < length) {
+        result[index++] = channel1[inputIndex];
+        result[index++] = channel2[inputIndex];
+        inputIndex++;
+      }
+    } else {
+      result = buffer.getChannelData(0);
+    }
+
+    const dataLength = result.length * (bitDepth / 8);
+    const bufferLength = 44 + dataLength;
+    const arrayBuffer = new ArrayBuffer(bufferLength);
+    const view = new DataView(arrayBuffer);
+
+    const writeString = (v, offset, str) => {
+      for (let i = 0; i < str.length; i++) v.setUint8(offset + i, str.charCodeAt(i));
+    };
+
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + dataLength, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, format, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numChannels * (bitDepth / 8), true);
+    view.setUint16(32, numChannels * (bitDepth / 8), true);
+    view.setUint16(34, bitDepth, true);
+    writeString(view, 36, 'data');
+    view.setUint32(40, dataLength, true);
+
+    let offset = 44;
+    for (let i = 0; i < result.length; i++) {
+      let s = Math.max(-1, Math.min(1, result[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      offset += 2;
+    }
+
+    return new Blob([view], { type: 'audio/wav' });
+  }
+</script>
+</body>
+</html>
