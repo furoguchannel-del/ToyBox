@@ -37,8 +37,14 @@
       height: auto;
       display: block;
     }
-    canvas {
-      display: none;
+    /* 映像の上に重ねて枠を描画するキャンバス */
+    #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
     }
 
     #resultBox {
@@ -72,7 +78,7 @@
     <h2>📷 QRリーダー</h2>
     <div id="status" class="status">カメラを起動中...</div>
     
-    <!-- カメラのライブ映像 -->
+    <!-- カメラのライブ映像と枠描画用キャンバス -->
     <div id="videoContainer">
       <video id="video" playsinline></video>
       <canvas id="canvas"></canvas>
@@ -97,7 +103,7 @@
 
     let scanning = true;
 
-    // ブラウザ標準のカメラAPIでライブ映像を直接取得
+    // カメラ起動
     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
       .then(function(stream) {
         video.srcObject = stream;
@@ -111,20 +117,37 @@
         statusDiv.innerHTML = '<span style="color:red;">カメラの起動に失敗しました。<br>ブラウザのカメラ権限を許可してください。</span>';
       });
 
+    // 枠を描画する補助関数
+    function drawLine(begin, end, color) {
+      canvas.beginPath();
+      canvas.moveTo(begin.x, begin.y);
+      canvas.lineTo(end.x, end.y);
+      canvas.lineWidth = 4;
+      canvas.strokeStyle = color;
+      canvas.stroke();
+    }
+
     function tick() {
       if (!scanning) return;
 
       if (video.readyState === video.HAVE_ENOUGH_DATA) {
         canvasElement.height = video.videoHeight;
         canvasElement.width = video.videoWidth;
+        
         canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
         
         const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
         const code = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: "dontInvert",
+          inversionAttempts: "attemptBoth",
         });
 
         if (code) {
+          // 認識したQRコードの4つの角に緑色の枠線を描画
+          drawLine(code.location.topLeftCorner, code.location.topRightCorner, "#00FF00");
+          drawLine(code.location.topRightCorner, code.location.bottomRightCorner, "#00FF00");
+          drawLine(code.location.bottomRightCorner, code.location.bottomLeftCorner, "#00FF00");
+          drawLine(code.location.bottomLeftCorner, code.location.topLeftCorner, "#00FF00");
+
           scanning = false;
           
           // カメラを停止
