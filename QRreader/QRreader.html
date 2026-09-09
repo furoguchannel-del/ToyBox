@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QRリーダー</title>
-  <!-- jsQR ライブラリ -->
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <!-- html5-qrcode ライブラリ -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5.qrcode.min.js"></script>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -24,21 +24,17 @@
     }
     h2 { margin-top: 0; color: #333; font-size: 1.25rem; }
     
-    .camera-btn {
-      display: block;
+    #reader {
       width: 100%;
-      background: #28a745;
-      color: white;
-      padding: 15px;
-      border: none;
       border-radius: 8px;
-      font-size: 1.2rem;
-      font-weight: bold;
-      cursor: pointer;
+      overflow: hidden;
+      background: #000;
       margin-bottom: 15px;
-      box-shadow: 0 4px 6px rgba(40,167,69,0.2);
     }
-    .camera-btn:active { background: #218838; }
+    #reader video {
+      width: 100% !important;
+      object-fit: cover;
+    }
 
     #resultBox {
       background: #f8f9fa;
@@ -62,22 +58,30 @@
       text-decoration: none;
       margin-top: 10px;
     }
-    .status { font-weight: bold; color: #666; margin-bottom: 15px; font-size: 0.9rem; }
+    .btn-link:active { background: #0056b3; }
+    .status { font-weight: bold; color: #007bff; margin-bottom: 15px; font-size: 0.9rem; }
+    .restart-btn {
+      background: #6c757d;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-top: 10px;
+      display: none;
+    }
   </style>
 </head>
 <body>
 
   <div class="container">
     <h2>📷 QRリーダー</h2>
-    <div class="status">下のボタンを押すとカメラが起動します</div>
+    <div id="status" class="status">カメラを起動中...</div>
     
-    <!-- 直接カメラを起動させるための設定 -->
-    <button class="camera-btn" onclick="document.getElementById('cameraInput').click();">
-      📸 カメラを起動して撮影
-    </button>
-    
-    <!-- 隠しファイル入力（capture属性で背面カメラを指定） -->
-    <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display: none;">
+    <!-- ライブカメラ映像が表示されるエリア -->
+    <div id="reader"></div>
+
+    <button id="restartBtn" class="restart-btn" onclick="location.reload()">もう一度スキャンする</button>
 
     <!-- 読み取り結果表示エリア -->
     <div id="resultBox">
@@ -88,72 +92,77 @@
   </div>
 
   <script>
-    const cameraInput = document.getElementById('cameraInput');
-    const resultBox = document.getElementById('resultBox');
-    const resultText = document.getElementById('resultText');
-    const linkArea = document.getElementById('linkArea');
+    let html5QrCode = null;
 
-    cameraInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = function(event) {
-        const img = new Image();
-        img.onload = function() {
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
+    function onScanSuccess(decodedText, decodedResult) {
+      // 読み取り成功したらスキャンを停止
+      if (html5QrCode) {
+        html5QrCode.stop().then(() => {
+          document.getElementById('status').innerText = "読み取り成功！";
+          document.getElementById('restartBtn').style.display = 'inline-block';
           
-          // 画像サイズが大きい場合の縮小処理（解析速度アップのため）
-          let width = img.width;
-          let height = img.height;
-          const maxDim = 1200;
-          if (width > maxDim || height > maxDim) {
-            if (width > height) {
-              height = Math.round((height * maxDim) / width);
-              width = maxDim;
-            } else {
-              width = Math.round((width * maxDim) / height);
-              height = maxDim;
-            }
-          }
+          // 結果を表示
+          document.getElementById('resultText').innerText = decodedText;
+          document.getElementById('resultBox').style.display = 'block';
 
-          canvas.width = width;
-          canvas.height = height;
-          ctx.drawImage(img, 0, 0, width, height);
+          // リンクの場合の処理
+          const linkArea = document.getElementById('linkArea');
+          linkArea.innerHTML = '';
+          
+          if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
+            const a = document.createElement('a');
+            a.href = decodedText;
+            a.className = 'btn-link';
+            a.innerText = 'このリンクを開く';
+            linkArea.appendChild(a);
 
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height);
-
-          if (code) {
-            const text = code.data;
-            resultText.innerText = text;
-            resultBox.style.display = 'block';
-
-            linkArea.innerHTML = '';
-            if (text.startsWith('http://') || text.startsWith('https://')) {
-              const a = document.createElement('a');
-              a.href = text;
-              a.className = 'btn-link';
-              a.innerText = 'このリンクを開く（管理画面へ）';
-              linkArea.appendChild(a);
-
-              // すぐに自動でジャンプさせたい場合は下の行のコメントアウトを外してください
-              // window.location.href = text;
-            } else {
-              const p = document.createElement('p');
-              p.style.color = '#666';
-              p.style.fontSize = '0.9rem';
-              p.innerText = 'テキストが読み込まれました。';
-              linkArea.appendChild(p);
-            }
+            // すぐにジャンプさせたい場合は下のコメントを外してください
+            // window.location.href = decodedText;
           } else {
-            alert('QRコードが認識できませんでした。明るい場所で再度撮影してください。');
+            const p = document.createElement('p');
+            p.style.color = '#666';
+            p.style.fontSize = '0.9rem';
+            p.innerText = 'テキストが読み込まれました。';
+            linkArea.appendChild(p);
           }
-        };
-        img.src = event.target.result;
-      };
-      reader.readAsDataURL(file);
+        }).catch(err => {
+          console.error("停止エラー", err);
+        });
+      }
+    }
+
+    function onScanFailure(error) {
+      // スキャン中の毎フレームのエラーは無視
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      html5QrCode = new Html5Qrcode("reader");
+      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+      // PCのWebカメラとスマホの両方で動くようにカメラを自動検出して起動
+      Html5Qrcode.getCameras().then(devices => {
+        if (devices && devices.length) {
+          // スマホなら背面カメラを優先、PCなら最初のカメラを選択
+          let cameraId = devices[0].id;
+          for (let device of devices) {
+            if (device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('environment') || device.label.toLowerCase().includes('背面')) {
+              cameraId = device.id;
+              break;
+            }
+          }
+          return html5QrCode.start(cameraId, config, onScanSuccess, onScanFailure);
+        } else {
+          throw new Error("利用可能なカメラが見つかりません。");
+        }
+      }).catch(err => {
+        // カメラリストが取得できない場合のフォールバック（facingModeを指定）
+        return html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess, onScanFailure);
+      }).then(() => {
+        document.getElementById('status').innerText = "QRコードをカメラにかざしてください";
+      }).catch(err => {
+        document.getElementById('status').innerHTML = '<span style="color:red;">カメラの起動に失敗しました。<br>ブラウザのカメラ権限を許可してください。</span>';
+        console.error("カメラ起動エラー:", err);
+      });
     });
   </script>
 </body>
