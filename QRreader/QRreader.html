@@ -3,9 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QRリーダー</title>
-  <!-- jsQR ライブラリ -->
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <title>QR・バーコードリーダー</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -37,8 +35,7 @@
       height: auto;
       display: block;
     }
-    /* 映像の上に重ねて枠を描画するキャンバス */
-    #canvas {
+    canvas {
       position: absolute;
       top: 0;
       left: 0;
@@ -57,7 +54,7 @@
       text-align: left;
       display: none;
     }
-    .btn-link {
+    .btn {
       display: inline-block;
       background: #007bff;
       color: white;
@@ -69,13 +66,21 @@
       text-decoration: none;
       margin-top: 10px;
     }
+    .btn:active { background: #0056b3; }
+    .btn-secondary {
+      background: #6c757d;
+      display: none;
+      margin-top: 15px;
+      width: 100%;
+    }
+    .btn-secondary:active { background: #5a6268; }
     .status { font-weight: bold; color: #007bff; margin-bottom: 15px; font-size: 0.9rem; }
   </style>
 </head>
 <body>
 
   <div class="container">
-    <h2>📷 QRリーダー</h2>
+    <h2>📷 QR・バーコードリーダー</h2>
     <div id="status" class="status">カメラを起動中...</div>
     
     <!-- カメラのライブ映像と枠描画用キャンバス -->
@@ -84,8 +89,12 @@
       <canvas id="canvas"></canvas>
     </div>
 
+    <!-- もう一度読み取るボタン -->
+    <button id="restartBtn" class="btn btn-secondary" onclick="startCamera()">もう一度読み取る</button>
+
     <!-- 読み取り結果表示エリア -->
     <div id="resultBox">
+      <div id="formatLabel" style="font-size: 0.75rem; color: #888; font-weight: bold; margin-bottom: 2px;"></div>
       <div style="font-size: 0.85rem; color: #666; margin-bottom: 4px;">読み取った内容:</div>
       <div id="resultText" style="font-weight: bold; font-size: 1.1rem; color: #333;"></div>
       <div id="linkArea" style="margin-top: 10px; text-align: center;"></div>
@@ -99,89 +108,135 @@
     const statusDiv = document.getElementById('status');
     const resultBox = document.getElementById('resultBox');
     const resultText = document.getElementById('resultText');
+    const formatLabel = document.getElementById('formatLabel');
     const linkArea = document.getElementById('linkArea');
+    const restartBtn = document.getElementById('restartBtn');
 
-    let scanning = true;
+    let stream = null;
+    let scanning = false;
+    let barcodeDetector = null;
 
-    // カメラ起動
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-      .then(function(stream) {
+    // ブラウザが BarcodeDetector API に対応しているか確認
+    if ('BarcodeDetector' in window) {
+      // 読み取りたい形式を指定（QRコードと、商品のバーコード等でよく使われる形式を指定）
+      BarcodeDetector.getSupportedFormats().then(supportedFormats => {
+        console.log('サポートされているフォーマット:', supportedFormats);
+      });
+      
+      barcodeDetector = new BarcodeDetector({
+        formats: [
+          'qr_code', 
+          'ean_13', 
+          'ean_8', 
+          'code_128', 
+          'code_39', 
+          'upc_a', 
+          'upc_e,',
+          'data_matrix'
+        ]
+      });
+    } else {
+      statusDiv.innerHTML = '<span style="color:red;">お使いのブラウザはバーコードリーダーAPIに非対応です。<br>最新のChrome等でお試しください。</span>';
+    }
+
+    // カメラ起動関数（再読み取り時にも使うため分離）
+    async function startCamera() {
+      resultBox.style.display = 'none';
+      restartBtn.style.display = 'none';
+      canvas.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: "environment" } 
+        });
         video.srcObject = stream;
         video.setAttribute("playsinline", true);
-        video.play();
-        statusDiv.innerText = "QRコードをカメラにかざしてください";
+        await video.play();
+        
+        statusDiv.innerText = "QRコードまたはバーコードにかざしてください";
+        scanning = true;
         requestAnimationFrame(tick);
-      })
-      .catch(function(err) {
+      } catch (err) {
         console.error("カメラエラー:", err);
         statusDiv.innerHTML = '<span style="color:red;">カメラの起動に失敗しました。<br>ブラウザのカメラ権限を許可してください。</span>';
-      });
+      }
+    }
 
-    // 枠を描画する補助関数
-    function drawLine(begin, end, color) {
+    // 検出枠を描画するヘルパー
+    function drawBoundingBox(points, color) {
       canvas.beginPath();
-      canvas.moveTo(begin.x, begin.y);
-      canvas.lineTo(end.x, end.y);
+      canvas.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i++) {
+        canvas.lineTo(points[i].x, points[i].y);
+      }
+      canvas.closePath();
       canvas.lineWidth = 4;
       canvas.strokeStyle = color;
       canvas.stroke();
     }
 
-    function tick() {
+    async function tick() {
       if (!scanning) return;
 
       if (video.readyState === video.HAVE_ENOUGH_DATA) {
         canvasElement.height = video.videoHeight;
         canvasElement.width = video.videoWidth;
-        
         canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
-        
-        const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: "attemptBoth",
-        });
 
-        if (code) {
-          // 認識したQRコードの4つの角に緑色の枠線を描画
-          drawLine(code.location.topLeftCorner, code.location.topRightCorner, "#00FF00");
-          drawLine(code.location.topRightCorner, code.location.bottomRightCorner, "#00FF00");
-          drawLine(code.location.bottomRightCorner, code.location.bottomLeftCorner, "#00FF00");
-          drawLine(code.location.bottomLeftCorner, code.location.topLeftCorner, "#00FF00");
+        if (barcodeDetector) {
+          try {
+            const barcodes = await barcodeDetector.detect(canvasElement);
+            if (barcodes.length > 0) {
+              const code = barcodes[0]; // 最初に見つかったコードを採用
+              scanning = false;
 
-          scanning = false;
-          
-          // カメラを停止
-          const stream = video.srcObject;
-          if (stream) {
-            stream.getTracks().forEach(track => track.stop());
+              // カメラを停止
+              if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+              }
+
+              // 枠を描画
+              if (code.cornerPoints) {
+                drawBoundingBox(code.cornerPoints, "#00FF00");
+              }
+
+              // 結果表示
+              statusDiv.innerText = "読み取り成功！";
+              formatLabel.innerText = `[ 検出タイプ: ${code.format.toUpperCase()} ]`;
+              resultText.innerText = code.rawValue;
+              resultBox.style.display = 'block';
+              restartBtn.style.display = 'block';
+
+              linkArea.innerHTML = '';
+              if (code.rawValue.startsWith('http://') || code.rawValue.startsWith('https://')) {
+                const a = document.createElement('a');
+                a.href = code.rawValue;
+                a.className = 'btn';
+                a.innerText = 'このリンクを開く';
+                linkArea.appendChild(a);
+              } else {
+                const p = document.createElement('p');
+                p.style.color = '#666';
+                p.style.fontSize = '0.9rem';
+                p.innerText = 'コードが読み込まれました。';
+                linkArea.appendChild(p);
+              }
+              return; // ループを抜ける
+            }
+          } catch (err) {
+            // 検出中のフレームエラーは無視
           }
-
-          statusDiv.innerText = "読み取り成功！";
-          resultText.innerText = code.data;
-          resultBox.style.display = 'block';
-
-          linkArea.innerHTML = '';
-          if (code.data.startsWith('http://') || code.data.startsWith('https://')) {
-            const a = document.createElement('a');
-            a.href = code.data;
-            a.className = 'btn-link';
-            a.innerText = 'このリンクを開く';
-            linkArea.appendChild(a);
-
-            // すぐに自動でジャンプさせたい場合は下のコメントを外してください
-            // window.location.href = code.data;
-          } else {
-            const p = document.createElement('p');
-            p.style.color = '#666';
-            p.style.fontSize = '0.9rem';
-            p.innerText = 'テキストが読み込まれました。';
-            linkArea.appendChild(p);
-          }
-          return;
         }
       }
-      requestAnimationFrame(tick);
+      if (scanning) {
+        requestAnimationFrame(tick);
+      }
     }
+
+    // 初回起動
+    window.addEventListener('DOMContentLoaded', () => {
+      startCamera();
+    });
   </script>
 </body>
 </html>
