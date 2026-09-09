@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR・バーコードリーダー</title>
-  <!-- 安定した unpkg CDN から Html5Qrcode ライブラリを読み込み -->
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
+  <title>QRリーダー</title>
+  <!-- jsQR ライブラリ -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -24,16 +24,42 @@
     }
     h2 { margin-top: 0; color: #333; font-size: 1.25rem; }
     
-    #reader {
+    #videoContainer {
+      position: relative;
       width: 100%;
       border-radius: 8px;
       overflow: hidden;
       background: #000;
       margin-bottom: 15px;
     }
-    #reader video {
-      width: 100% !important;
-      object-fit: cover;
+    video {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    /* ローカル確認用（ドラッグ＆ドロップ領域） */
+    #dropArea {
+      border: 2px dashed #ccc;
+      padding: 15px;
+      border-radius: 8px;
+      background: #fafafa;
+      margin-bottom: 15px;
+      font-size: 0.85rem;
+      color: #666;
+      cursor: pointer;
+    }
+    #dropArea.dragover {
+      background: #e9ecef;
+      border-color: #007bff;
     }
 
     #resultBox {
@@ -65,25 +91,32 @@
       margin-top: 15px;
       width: 100%;
     }
-    .btn-secondary:active { background: #5a6268; }
     .status { font-weight: bold; color: #007bff; margin-bottom: 15px; font-size: 0.9rem; }
   </style>
 </head>
 <body>
 
   <div class="container">
-    <h2>📷 QR・バーコードリーダー</h2>
+    <h2>📷 QRリーダー</h2>
     <div id="status" class="status">カメラを起動中...</div>
     
-    <!-- ライブカメラ映像表示エリア -->
-    <div id="reader"></div>
+    <!-- カメラのライブ映像と枠描画用キャンバス -->
+    <div id="videoContainer">
+      <video id="video" playsinline></video>
+      <canvas id="canvas"></canvas>
+    </div>
+
+    <!-- ローカルテスト用（カメラが使えない環境での画像読み込み・ドロップ） -->
+    <div id="dropArea" onclick="document.getElementById('fileInput').click()">
+      📁 QRコード画像をここにドラッグ＆ドロップ<br>またはクリックして画像を選択
+      <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="handleFileSelect(this)">
+    </div>
 
     <!-- もう一度読み取るボタン -->
-    <button id="restartBtn" class="btn btn-secondary" onclick="startScanner()">もう一度読み取る</button>
+    <button id="restartBtn" class="btn btn-secondary" onclick="startCamera()">もう一度読み取る</button>
 
     <!-- 読み取り結果表示エリア -->
     <div id="resultBox">
-      <div id="formatLabel" style="font-size: 0.75rem; color: #888; font-weight: bold; margin-bottom: 2px;"></div>
       <div style="font-size: 0.85rem; color: #666; margin-bottom: 4px;">読み取った内容:</div>
       <div id="resultText" style="font-weight: bold; font-size: 1.1rem; color: #333;"></div>
       <div id="linkArea" style="margin-top: 10px; text-align: center;"></div>
@@ -91,90 +124,161 @@
   </div>
 
   <script>
-    let html5QrCode = null;
+    const video = document.getElementById('video');
+    const canvasElement = document.getElementById('canvas');
+    const canvas = canvasElement.getContext('2d');
+    const statusDiv = document.getElementById('status');
+    const resultBox = document.getElementById('resultBox');
+    const resultText = document.getElementById('resultText');
+    const linkArea = document.getElementById('linkArea');
+    const restartBtn = document.getElementById('restartBtn');
+    const dropArea = document.getElementById('dropArea');
 
-    function onScanSuccess(decodedText, decodedResult) {
-      // 読み取り成功時の処理
-      if (html5QrCode) {
-        html5QrCode.stop().then(() => {
-          document.getElementById('status').innerText = "読み取り成功！";
-          document.getElementById('restartBtn').style.display = 'block';
-          
-          // フォーマット名（QRかバーコードの種類）を表示
-          const formatName = decodedResult.result.format.formatName || "CODE";
-          document.getElementById('formatLabel').innerText = `[ 検出タイプ: ${formatName} ]`;
-          
-          document.getElementById('resultText').innerText = decodedText;
-          document.getElementById('resultBox').style.display = 'block';
+    let stream = null;
+    let scanning = false;
 
-          const linkArea = document.getElementById('linkArea');
-          linkArea.innerHTML = '';
-          
-          if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
-            const a = document.createElement('a');
-            a.href = decodedText;
-            a.className = 'btn';
-            a.innerText = 'このリンクを開く';
-            linkArea.appendChild(a);
-          } else {
-            const p = document.createElement('p');
-            p.style.color = '#666';
-            p.style.fontSize = '0.9rem';
-            p.innerText = 'コードが読み込まれました。';
-            linkArea.appendChild(p);
-          }
-        }).catch(err => {
-          console.error("停止エラー", err);
+    function drawLine(begin, end, color) {
+      canvas.beginPath();
+      canvas.moveTo(begin.x, begin.y);
+      canvas.lineTo(end.x, end.y);
+      canvas.lineWidth = 4;
+      canvas.strokeStyle = color;
+      canvas.stroke();
+    }
+
+    function showResult(text) {
+      scanning = false;
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+
+      statusDiv.innerText = "読み取り成功！";
+      resultText.innerText = text;
+      resultBox.style.display = 'block';
+      restartBtn.style.display = 'block';
+
+      linkArea.innerHTML = '';
+      if (text.startsWith('http://') || text.startsWith('https://')) {
+        const a = document.createElement('a');
+        a.href = text;
+        a.className = 'btn';
+        a.innerText = 'このリンクを開く';
+        linkArea.appendChild(a);
+      } else {
+        const p = document.createElement('p');
+        p.style.color = '#666';
+        p.style.fontSize = '0.9rem';
+        p.innerText = 'テキストが読み込まれました。';
+        linkArea.appendChild(p);
+      }
+    }
+
+    async function startCamera() {
+      resultBox.style.display = 'none';
+      restartBtn.style.display = 'none';
+      canvas.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: "environment" } 
         });
+        video.srcObject = stream;
+        video.setAttribute("playsinline", true);
+        await video.play();
+        
+        statusDiv.innerText = "QRコードをカメラにかざしてください";
+        scanning = true;
+        requestAnimationFrame(tick);
+      } catch (err) {
+        console.warn("カメラ非対応またはブロック環境:", err);
+        statusDiv.innerHTML = '<span style="color:#e67e22;">ローカル環境のためカメラは利用できません。<br>下の枠にQR画像をドロップしてテストできます。</span>';
       }
     }
 
-    function onScanFailure(error) {
-      // スキャン中の毎フレームのエラー（見つからない状態）は無視
+    function tick() {
+      if (!scanning) return;
+
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvasElement.height = video.videoHeight;
+        canvasElement.width = video.videoWidth;
+        
+        canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+        
+        const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "attemptBoth",
+        });
+
+        if (code) {
+          drawLine(code.location.topLeftCorner, code.location.topRightCorner, "#00FF00");
+          drawLine(code.location.topRightCorner, code.location.bottomRightCorner, "#00FF00");
+          drawLine(code.location.bottomRightCorner, code.location.bottomLeftCorner, "#00FF00");
+          drawLine(code.location.bottomLeftCorner, code.location.topLeftCorner, "#00FF00");
+
+          showResult(code.data);
+          return;
+        }
+      }
+      if (scanning) {
+        requestAnimationFrame(tick);
+      }
     }
 
-    function startScanner() {
-      document.getElementById('resultBox').style.display = 'none';
-      document.getElementById('restartBtn').style.display = 'none';
-      document.getElementById('status').innerText = "カメラを起動中...";
-
-      if (!html5QrCode) {
-        html5QrCode = new Html5Qrcode("reader");
+    // 画像ファイル選択・ドロップ時の処理（ローカルテスト用）
+    function handleFileSelect(input) {
+      if (input.files && input.files[0]) {
+        processImageFile(input.files[0]);
       }
+    }
 
-      const config = { 
-        fps: 10, 
-        qrbox: { width: 280, height: 180 } // 横長のバーコードも捉えやすいサイズ感
+    dropArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropArea.classList.add('dragover');
+    });
+
+    dropArea.addEventListener('dragleave', () => {
+      dropArea.classList.remove('dragover');
+    });
+
+    dropArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropArea.classList.remove('dragover');
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        processImageFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    function processImageFile(file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          canvasElement.height = img.height;
+          canvasElement.width = img.width;
+          canvas.drawImage(img, 0, 0);
+          
+          const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: "attemptBoth",
+          });
+
+          if (code) {
+            drawLine(code.location.topLeftCorner, code.location.topRightCorner, "#00FF00");
+            drawLine(code.location.topRightCorner, code.location.bottomRightCorner, "#00FF00");
+            drawLine(code.location.bottomRightCorner, code.location.bottomLeftCorner, "#00FF00");
+            drawLine(code.location.bottomLeftCorner, code.location.topLeftCorner, "#00FF00");
+            showResult(code.data);
+          } else {
+            alert("QRコードが検出されませんでした。");
+          }
+        };
+        img.src = e.target.result;
       };
-
-      // スマホの背面カメラ優先、なければ自動選択
-      html5QrCode.start(
-        { facingMode: "environment" }, 
-        config, 
-        onScanSuccess, 
-        onScanFailure
-      ).then(() => {
-        document.getElementById('status').innerText = "QRコードまたはバーコードにかざしてください";
-      }).catch(err => {
-        // フォールバックとしてデバイス直接指定を試す
-        Html5Qrcode.getCameras().then(devices => {
-          if (devices && devices.length) {
-            return html5QrCode.start(devices[0].id, config, onScanSuccess, onScanFailure);
-          } else {
-            throw new Error("カメラが見つかりません");
-          }
-        }).then(() => {
-          document.getElementById('status').innerText = "QRコードまたはバーコードにかざしてください";
-        }).catch(e => {
-          document.getElementById('status').innerHTML = '<span style="color:red;">カメラの起動に失敗しました。<br>ブラウザの権限を確認してください。</span>';
-          console.error("カメラ起動エラー:", e);
-        });
-      });
+      reader.readAsDataURL(file);
     }
 
-    // ページ読み込み時にスキャナー開始
     window.addEventListener('DOMContentLoaded', () => {
-      startScanner();
+      startCamera();
     });
   </script>
 </body>
