@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QRリーダー</title>
-  <!-- html5-qrcode ライブラリ -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5.qrcode.min.js"></script>
+  <!-- より安定している unpkg の CDN に変更 -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -95,17 +95,14 @@
     let html5QrCode = null;
 
     function onScanSuccess(decodedText, decodedResult) {
-      // 読み取り成功したらスキャンを停止
       if (html5QrCode) {
         html5QrCode.stop().then(() => {
           document.getElementById('status').innerText = "読み取り成功！";
           document.getElementById('restartBtn').style.display = 'inline-block';
           
-          // 結果を表示
           document.getElementById('resultText').innerText = decodedText;
           document.getElementById('resultBox').style.display = 'block';
 
-          // リンクの場合の処理
           const linkArea = document.getElementById('linkArea');
           linkArea.innerHTML = '';
           
@@ -115,9 +112,6 @@
             a.className = 'btn-link';
             a.innerText = 'このリンクを開く';
             linkArea.appendChild(a);
-
-            // すぐにジャンプさせたい場合は下のコメントを外してください
-            // window.location.href = decodedText;
           } else {
             const p = document.createElement('p');
             p.style.color = '#666';
@@ -139,10 +133,8 @@
       html5QrCode = new Html5Qrcode("reader");
       const config = { fps: 10, qrbox: { width: 250, height: 250 } };
 
-      // PCのWebカメラとスマホの両方で動くようにカメラを自動検出して起動
       Html5Qrcode.getCameras().then(devices => {
         if (devices && devices.length) {
-          // スマホなら背面カメラを優先、PCなら最初のカメラを選択
           let cameraId = devices[0].id;
           for (let device of devices) {
             if (device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('environment') || device.label.toLowerCase().includes('背面')) {
@@ -155,7 +147,6 @@
           throw new Error("利用可能なカメラが見つかりません。");
         }
       }).catch(err => {
-        // カメラリストが取得できない場合のフォールバック（facingModeを指定）
         return html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess, onScanFailure);
       }).then(() => {
         document.getElementById('status').innerText = "QRコードをカメラにかざしてください";
