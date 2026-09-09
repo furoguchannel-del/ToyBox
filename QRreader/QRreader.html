@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QRリーダー</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #f0f2f5;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+    }
+    .container {
+      max-width: 500px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    h2 { margin-top: 0; color: #333; font-size: 1.25rem; }
+    #reader {
+      width: 100%;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #000;
+      margin-bottom: 15px;
+    }
+    #reader video {
+      width: 100% !important;
+      object-fit: cover;
+    }
+    #resultBox {
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      padding: 12px;
+      border-radius: 6px;
+      word-break: break-all;
+      margin-top: 15px;
+      text-align: left;
+    }
+    .btn {
+      display: inline-block;
+      background: #007bff;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 1rem;
+      cursor: pointer;
+      text-decoration: none;
+      margin-top: 10px;
+    }
+    .btn:active { background: #0056b3; }
+    .status { font-weight: bold; color: #007bff; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h2>📷 QRリーダー</h2>
+    <div id="status" class="status">カメラを起動中...</div>
+    
+    <!-- カメラ映像表示エリア -->
+    <div id="reader"></div>
+
+    <!-- 読み取り結果表示エリア -->
+    <div id="resultBox" style="display: none;">
+      <div style="font-size: 0.85rem; color: #666; margin-bottom: 4px;">読み取った内容:</div>
+      <div id="resultText" style="font-weight: bold; font-size: 1.1rem; color: #333;"></div>
+      <div id="linkArea" style="margin-top: 10px; text-align: center;"></div>
+    </div>
+  </div>
+
+  <!-- html5-qrcode ライブラリのCDN読み込み -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5.qrcode.min.js"></script>
+
+  <script>
+    let html5QrCode = null;
+
+    function onScanSuccess(decodedText, decodedResult) {
+      // 読み取り成功したらスキャンを停止
+      if (html5QrCode) {
+        html5QrCode.stop().then(() => {
+          document.getElementById('status').innerText = "読み取り成功！";
+          
+          // 結果を表示
+          document.getElementById('resultText').innerText = decodedText;
+          document.getElementById('resultBox').style.display = 'block';
+
+          // 読み取った内容がURLの場合、ジャンプ用ボタンを表示
+          const linkArea = document.getElementById('linkArea');
+          linkArea.innerHTML = '';
+          
+          if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
+            const a = document.createElement('a');
+            a.href = decodedText;
+            a.className = 'btn';
+            a.innerText = 'このリンクを開く';
+            linkArea.appendChild(a);
+
+            // すぐに自動でジャンプさせたい場合は、下の行のコメントアウトを解除してください
+            // window.location.href = decodedText;
+          } else {
+            const p = document.createElement('p');
+            p.style.color = '#666';
+            p.style.fontSize = '0.9rem';
+            p.innerText = 'URLではないテキストが読み込まれました。';
+            linkArea.appendChild(p);
+          }
+        }).catch(err => {
+          console.error("停止エラー", err);
+        });
+      }
+    }
+
+    function onScanFailure(error) {
+      // スキャン中の毎フレームのエラーは無視
+    }
+
+    // ページ読み込み時にカメラを起動
+    window.addEventListener('DOMContentLoaded', () => {
+      html5QrCode = new Html5Qrcode("reader");
+      
+      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+      // スマホの背面カメラを優先して起動
+      html5QrCode.start(
+        { facingMode: "environment" }, 
+        config, 
+        onScanSuccess, 
+        onScanFailure
+      ).then(() => {
+        document.getElementById('status').innerText = "QRコードをカメラにかざしてください";
+      }).catch(err => {
+        document.getElementById('status').innerHTML = '<span style="color:red;">カメラの起動に失敗しました。<br>ブラウザのカメラ権限（常時許可など）を確認してください。</span>';
+        console.error("カメラ起動エラー:", err);
+      });
+    });
+  </script>
+</body>
+</html>
